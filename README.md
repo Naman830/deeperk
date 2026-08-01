@@ -94,15 +94,16 @@ Every one of those steps is traced end-to-end in [Chapter 8](#8-feature-walkthro
 
 ## 3. Tech Stack — and Why Each Piece
 
-Everything is **TypeScript**. One language, front to back.
+Two languages, split by workspace: the **frontend is TypeScript**, the **backend is plain JavaScript**. Each workspace owns its own language boundary — nothing in `server/` needs a build/compile step, and nothing in `web/` gives up type safety.
 
 | Layer | Choice | What it does | Why this and not something else |
 |---|---|---|---|
-| **Language** | TypeScript | JavaScript with type checking | Catches "cannot read property of undefined" *before* you run the code. In a real-time app where a message object travels through five layers, this saves hours. |
+| **Frontend language** | TypeScript | JavaScript with type checking | Catches "cannot read property of undefined" *before* you run the code — valuable in the UI where a message object travels through many components. |
+| **Backend language** | JavaScript | Plain Node.js, no compile step | The Socket.IO server is small and long-running; skipping TypeScript here keeps `npm run dev` instant with no build step in between. |
 | **Frontend + API** | Next.js 16 (App Router) | React pages + server-side API endpoints | One framework for UI *and* backend routes. React Server Components mean your first page load already has data — no loading spinner flash. |
 | **Real-time server** | Express + Socket.IO | Keeps a live connection open to every browser | See [Chapter 4](#4-architecture-two-servers-one-database) for why this is separate from Next.js. Socket.IO handles reconnection, rooms, and fallbacks that raw WebSockets don't. |
-| **Database** | PostgreSQL 18 | Stores users, messages, groups, everything | Chat data is deeply relational: users → friendships → conversations → members → messages. SQL joins are exactly the right tool. MongoDB would make friend-request queries awkward. |
-| **ORM** | Prisma | Type-safe database queries + migrations | You write `prisma.message.findMany()` and get autocomplete on every field. Schema changes become versioned migration files. Raw SQL is fine too — but Prisma's types catch typos at compile time. |
+| **Database** | Neon (serverless Postgres) | Stores users, messages, groups, everything | Hosted Postgres with no server to manage — chat data is deeply relational (users → friendships → conversations → members → messages), and SQL joins are exactly the right tool. MongoDB would make friend-request queries awkward. |
+| **ORM** | Drizzle ORM | Type-safe-ish database queries + migrations | Works natively with Neon's HTTP driver (`@neondatabase/serverless`), no codegen step, and the query builder stays close to real SQL. See [`Docs/db-connection.md`](Docs/db-connection.md) for the full setup. |
 | **Auth** | Better Auth | Signup, login, sessions, OTP | **Free forever and self-hosted** — user rows live in *your* Postgres. That matters enormously here: username search and friend requests need SQL `JOIN`s against the user table. With a hosted service like Clerk, users live on *their* servers and you'd need webhooks to mirror them into yours — an extra moving part that can silently drift out of sync. |
 | **Video/audio** | WebRTC (browser built-in) | Peer-to-peer media streams | It's already in every browser. No library, no server for the media itself. Your video goes *directly* to your friend — it never touches our server. |
 | **Media storage** | Cloudinary (free tier) | Stores uploaded images/videos | 25 GB free, automatic image compression and thumbnails, and it works from any host. Storing uploads on the server's own disk breaks the moment you deploy somewhere with a temporary filesystem. |
@@ -462,10 +463,9 @@ const unread = await prisma.message.count({
 | Tool | Version | Check with | If missing |
 |---|---|---|---|
 | Node.js | 20+ | `node -v` | [nodejs.org](https://nodejs.org) |
-| Docker | any recent | `docker -v` | [docker.com](https://docker.com) |
 | Git | any | `git --version` | [git-scm.com](https://git-scm.com) |
 
-Docker is only used to run Postgres. If you already have Postgres installed locally, you can skip Docker entirely and just point `DATABASE_URL` at your existing server.
+The database is hosted on [Neon](https://neon.tech) (free tier, serverless Postgres) — nothing to install or run locally for it.
 
 ### Step 1 — Install dependencies
 
@@ -476,22 +476,11 @@ npm install
 
 This installs for the root, `web/`, and `server/` all at once (npm workspaces).
 
-### Step 2 — Start the database
+### Step 2 — Create your Neon database
 
-```bash
-docker compose up -d
-```
-
-Expected output:
-```
-✔ Container chatsphere-postgres  Started
-```
-
-Verify it's actually up:
-```bash
-docker compose ps
-# STATUS should say "Up" and "(healthy)"
-```
+1. Sign up at [neon.tech](https://neon.tech) — free tier, no card needed
+2. Create a project, then copy the connection string from the dashboard
+3. Full walkthrough (schema, Drizzle setup, first query) is in [`Docs/db-connection.md`](Docs/db-connection.md)
 
 ### Step 3 — Get your Cloudinary keys (free, 2 minutes)
 
@@ -501,15 +490,11 @@ docker compose ps
 
 ### Step 4 — Environment variables
 
-```bash
-cp .env.example .env
-```
-
-Then open `.env` and fill it in:
+Create `.env` at the project root:
 
 ```bash
-# --- Database ---
-DATABASE_URL="postgresql://chatsphere:chatsphere@localhost:5432/chatsphere"
+# --- Database (Neon — from Step 2) ---
+DATABASE_URL="postgresql://user:password@ep-xxxx.region.aws.neon.tech/dbname?sslmode=require"
 
 # --- Better Auth ---
 # Generate a secret with:  openssl rand -base64 32
@@ -531,15 +516,15 @@ CLOUDINARY_API_SECRET="your-api-secret"
 ### Step 5 — Create the database tables
 
 ```bash
-npx prisma migrate dev
-npx prisma generate
+npx drizzle-kit push
 ```
 
 Expected output:
 ```
-✔ Generated Prisma Client
-Your database is now in sync with your schema.
+Changes applied
 ```
+
+Step-by-step explanation of what this does (and the schema behind it) lives in [`Docs/db-connection.md`](Docs/db-connection.md).
 
 ### Step 6 — Run it
 
@@ -562,14 +547,12 @@ Open **http://localhost:3000** and create your first account.
 npm run dev              # both servers
 npm run dev:web          # just Next.js
 npm run dev:server       # just Socket.IO
-npx prisma studio        # visual database browser at :5555 — use this constantly
-npx prisma migrate reset # wipe the database and start over
-docker compose down      # stop Postgres
-docker compose logs -f   # watch Postgres logs
-npm run typecheck        # tsc --noEmit in both workspaces
+npx drizzle-kit studio   # visual database browser — use this constantly
+npx drizzle-kit push     # sync db/schema.js → Neon after any schema change
+npm run typecheck        # tsc --noEmit in web/ only (server/ is plain JS)
 ```
 
-**`npx prisma studio` is your best debugging friend.** When something's wrong, open it and look at the actual rows.
+**`npx drizzle-kit studio` is your best debugging friend.** When something's wrong, open it and look at the actual rows.
 
 ---
 
@@ -993,18 +976,19 @@ No other code changes.
 webRtc_Project/
 │
 ├── README.md                    ← you are here
-├── docker-compose.yml           ← Postgres only
 ├── package.json                 ← workspaces + `npm run dev`
-├── .env.example
+├── .env                         ← DATABASE_URL (Neon), shared by both workspaces
 │
-├── prisma/
-│   ├── schema.prisma            ← the single source of truth for all data
-│   └── migrations/              ← auto-generated, commit these
+├── db/
+│   ├── schema.js                ← the single source of truth for all data (Drizzle, plain JS)
+│   └── index.js                 ← the connected `db` client both workspaces import
+├── drizzle.config.js            ← tells Drizzle Kit where schema + database are
+├── drizzle/                     ← auto-generated SQL migrations, commit these
 │
 ├── types/
-│   └── socket.ts                ← shared event types (see note below)
+│   └── socket.js                ← shared event shapes, documented with JSDoc (see note below)
 │
-├── web/                         ← NEXT.JS APP (port 3000)
+├── web/                         ← NEXT.JS APP, TypeScript (port 3000)
 │   └── src/
 │       ├── app/
 │       │   ├── (auth)/          ← login, signup, verify
@@ -1030,37 +1014,39 @@ webRtc_Project/
 │       │   └── useWebRTC.ts     ← all the peer-connection logic
 │       └── lib/
 │           ├── auth.ts          ← Better Auth config
-│           ├── prisma.ts        ← the singleton client
 │           └── cloudinary.ts
 │
-└── server/                      ← SOCKET.IO SERVER (port 4000)
+└── server/                      ← SOCKET.IO SERVER, JavaScript (port 4000)
     └── src/
-        ├── index.ts             ← boot Express + Socket.IO
-        ├── auth.ts              ← verify the session cookie on handshake
-        ├── presence.ts          ← the online-users Map
+        ├── index.js             ← boot Express + Socket.IO
+        ├── auth.js              ← verify the session cookie on handshake
+        ├── presence.js          ← the online-users Map
         └── handlers/
-            ├── chat.ts          ← message:send, typing
-            ├── call.ts          ← call:invite, rtc:* signaling relay
-            └── notify.ts        ← notification fan-out
+            ├── chat.js          ← message:send, typing
+            ├── call.js          ← call:invite, rtc:* signaling relay
+            └── notify.js        ← notification fan-out
 ```
 
-**Why `types/socket.ts` sits at the root:** both the browser and the socket server import from it, so an event can never be renamed on one side without breaking the build on the other. This is the biggest practical win of using TypeScript in both places:
+**Why `types/socket.js` sits at the root:** both the browser (TypeScript) and the socket server (JavaScript) need to agree on what each event's payload looks like, so an event can never be renamed on one side without the other noticing. Since the backend is plain JS, we can't share a `.ts` file directly — instead we document the shapes with **JSDoc comments** in a `.js` file. TypeScript can read JSDoc types from a `.js` file just like a real `.ts` file, so `web/` still gets full autocomplete and type-checking, while `server/` gets the same file with zero build step:
 
-```ts
-export interface ClientToServer {
-  'message:send':      (data: { conversationId: string; text: string; tempId: string }) => void;
-  'typing:start':      (data: { conversationId: string }) => void;
-  'call:invite':       (data: { to: string; kind: 'AUDIO' | 'VIDEO' }) => void;
-  'rtc:offer':         (data: { to: string; offer: RTCSessionDescriptionInit }) => void;
-  'rtc:ice-candidate': (data: { to: string; candidate: RTCIceCandidateInit }) => void;
-}
+```js
+/**
+ * @typedef {Object} MessageSendPayload
+ * @property {string} conversationId
+ * @property {string} text
+ * @property {string} tempId
+ */
 
-export interface ServerToClient {
-  'message:new':       (msg: Message) => void;
-  'presence:online':   (data: { userId: string }) => void;
-  'notify:call':       (data: { from: User; kind: 'AUDIO' | 'VIDEO' }) => void;
-}
+/**
+ * @typedef {Object} CallInvitePayload
+ * @property {string} to
+ * @property {'AUDIO' | 'VIDEO'} kind
+ */
+
+module.exports = {}; // this file only exports types via JSDoc, nothing at runtime
 ```
+
+In `web/`, importing this file gives full IntelliSense on event payloads. In `server/`, it's just documentation the editor still understands — no compiler needed either side.
 
 ---
 
