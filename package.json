@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "workspaces": [
+    "web",
+    "server"
+  ],
+  "devDependencies": {
+    "concurrently": "^10.0.4"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w web\" \"npm run dev -w server\""
+  }
+}
