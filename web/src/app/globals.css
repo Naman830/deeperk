@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* Design tokens. Referenced as bg-background, text-foreground, text-muted, etc. */
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #171717;
+  --color-muted: #6b7280;
+  --color-border: #e5e7eb;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #0a0a0a;
+    --color-foreground: #ededed;
+    --color-muted: #9ca3af;
+    --color-border: #262626;
+  }
+}
+
+body {
+  font-family: var(--font-sans);
+}
