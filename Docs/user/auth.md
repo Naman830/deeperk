@@ -21,6 +21,7 @@ This document covers the entire auth system: the signup flow, what goes in the d
 11. [Pros and Cons](#11-pros-and-cons)
 12. [Config Sketch](#12-config-sketch)
 13. [Launch Checklist](#13-launch-checklist)
+14. [Connecting It All to Neon — the Full Process](#14-connecting-it-all-to-neon--the-full-process)
 
 ---
 
@@ -64,7 +65,9 @@ This document covers the entire auth system: the signup flow, what goes in the d
 
 ## 2. Why Better Auth
 
-Better Auth is a self-hosted TypeScript auth library. User rows live in **our** Postgres, which matters enormously here: username search and friend requests are SQL `JOIN`s against the user table. With a hosted service (Clerk, Auth0) users live on *their* servers and we'd mirror them over webhooks — an extra moving part that silently drifts out of sync.
+Better Auth is a self-hosted TypeScript auth library. User rows live in **our** Postgres — specifically **Neon**, a hosted/serverless Postgres, queried through **Drizzle ORM** — which matters enormously here: username search and friend requests are SQL `JOIN`s against the user table. With a hosted service (Clerk, Auth0) users live on *their* servers and we'd mirror them over webhooks — an extra moving part that silently drifts out of sync.
+
+> Neon and Drizzle are the same database and ORM the rest of the app uses (see [`Docs/database/db-connection.md`](../database/db-connection.md) for the base setup). Auth doesn't get its own database — it gets its own *tables* inside the one shared schema at `db/schema.js`. That's the whole point of self-hosting Better Auth instead of using a hosted provider: one schema, one `db` object, one set of `JOIN`s across auth and app data.
 
 ### What it gives us for free
 
@@ -203,18 +206,23 @@ Avatar and bio. **Skippable**, and they can be edited forever. Nothing here is r
 
 ### `PendingRegistration` — ours, temporary
 
-```prisma
-model PendingRegistration {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  otpHash    String                            // SHA-256 of the code. NEVER the code.
-  attempts   Int      @default(0)
-  verifiedAt DateTime?                         // set once the code checks out
-  expiresAt  DateTime                          // now + 15 min
-  createdAt  DateTime @default(now())
+```js
+// db/schema.js
+const { pgTable, text, integer, timestamp, index } = require("drizzle-orm/pg-core");
 
-  @@index([expiresAt])                         // for the cleanup sweep
-}
+const pendingRegistrations = pgTable("pending_registration", {
+  id:         text("id").primaryKey(),
+  email:      text("email").notNull().unique(),
+  otpHash:    text("otp_hash").notNull(),               // SHA-256 of the code. NEVER the code.
+  attempts:   integer("attempts").default(0).notNull(),
+  verifiedAt: timestamp("verified_at"),                 // set once the code checks out
+  expiresAt:  timestamp("expires_at").notNull(),        // now + 15 min
+  createdAt:  timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  expiresAtIdx: index("pending_reg_expires_at_idx").on(table.expiresAt), // for the cleanup sweep
+}));
+
+module.exports = { pendingRegistrations };
 ```
 
 Rows live for at most 15 minutes. A nightly job deletes anything expired:
@@ -278,17 +286,22 @@ Hashed codes with expiries, for OTP login and password reset.
 
 ### `AuthEvent` — our audit log
 
-```prisma
-model AuthEvent {
-  id        String   @id @default(cuid())
-  userId    String?                          // null for failed attempts on unknown emails
-  type      String                           // login_ok | login_fail | otp_sent | password_changed | 2fa_enabled | ...
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
+```js
+// db/schema.js
+const { pgTable, text, timestamp, index } = require("drizzle-orm/pg-core");
 
-  @@index([userId, createdAt])
-}
+const authEvents = pgTable("auth_event", {
+  id:        text("id").primaryKey(),
+  userId:    text("user_id"),                  // null for failed attempts on unknown emails — no FK, the user may not exist
+  type:      text("type").notNull(),           // login_ok | login_fail | otp_sent | password_changed | 2fa_enabled | ...
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userCreatedIdx: index("auth_event_user_created_idx").on(table.userId, table.createdAt),
+}));
+
+module.exports = { authEvents };
 ```
 
 Cheap to write, invaluable when someone asks "was my account accessed?" Note it stores **event types, never credentials** — no emails typed, no codes, no passwords.
@@ -555,11 +568,13 @@ Better Auth's built-in rate limiter covers its own routes; our three custom endp
 ```ts
 // web/src/lib/auth.ts
 import { betterAuth } from 'better-auth';
-import { prismaAdapter } from 'better-auth/adapters/prisma';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { emailOTP, username, twoFactor, haveIBeenPwned } from 'better-auth/plugins';
+import { db } from '../../../db';          // the shared Neon connection — see §14
+import * as schema from '../../../db/schema';
 
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, { provider: 'postgresql' }),
+  database: drizzleAdapter(db, { provider: 'pg', schema }),
 
   emailAndPassword: {
     enabled: true,
@@ -658,6 +673,134 @@ RESEND_API_KEY=          # production only; dev prints OTPs to the terminal
 - [ ] Signup, login, wrong OTP ×3, expired OTP, password reset, 2FA enable + login, backup-code login, and "log out everywhere" all tested end to end
 - [ ] Socket handshake rejects a missing/invalid/expired cookie
 - [ ] Confirmed that deleting a `Session` row disconnects that device's socket
+
+---
+
+## 14. Connecting It All to Neon — the Full Process
+
+Everything above describes *behavior*. This section is the mechanical, in-order process for wiring auth to the real database: Neon (hosted Postgres) + Drizzle ORM (the query layer) + Better Auth (session/password logic on top). If you haven't set up the base connection yet, read [`Docs/database/db-connection.md`](../database/db-connection.md) first — this section assumes that groundwork exists and focuses on what's *specific to auth*.
+
+### 14.1 The order that actually works
+
+Auth tables reference each other (`Account.userId → User.id`, `Session.userId → User.id`), so the order you build things in matters — get it backwards and you'll spend an afternoon chasing "relation does not exist" errors.
+
+```
+1. Provision Neon, get DATABASE_URL           →  §2 of db-connection.md
+2. Write db/schema.js  — ALL tables, auth + app, in one file
+3. Write db/index.js   — one shared `db` connection
+4. Point drizzle.config.js at db/schema.js
+5. npx drizzle-kit push                        →  tables now exist in Neon
+6. Wire betterAuth() to that same `db` via drizzleAdapter
+7. Write our three custom endpoints (start/verify/complete) against the same schema
+8. Point the Socket.IO server's handshake check at the same `db`
+```
+
+Step 2 is the one worth slowing down for.
+
+### 14.2 One schema file, not one-per-app
+
+`db/schema.js` lives at the **project root**, not inside `web/` or `server/` — both workspaces `require("../db")` and get the exact same tables. This is the entire reason we self-host Better Auth instead of using Clerk/Auth0: a hosted provider's user table can't be `JOIN`ed against our `friend_request` or `conversation_member` tables without a network hop. One Postgres database, one schema file, and `db.select().from(friendRequests).innerJoin(users, ...)` just works.
+
+**Critical implication:** don't let Better Auth's tables live in a separate "auth schema" or separate migration stream from the app tables. If they drift out of sync — someone edits `friend_request.senderId` to reference a `users` table that no longer matches what Better Auth expects — every join silently breaks. Define everything, auth and app, in the same `db/schema.js`, and `drizzle-kit push` it together.
+
+### 14.3 Writing the auth tables in `db/schema.js`
+
+Better Auth expects specific table/column shapes for `user`, `session`, `account`, and `verification`. Rather than hand-invent them, generate them once and then extend the `user` table with our own fields:
+
+```bash
+npx @better-auth/cli generate --config web/src/lib/auth.ts --output db/schema.js
+```
+
+This writes Drizzle `pgTable` definitions for `user`, `session`, `account`, and `verification` matching exactly what `drizzleAdapter` expects at runtime — column names Better Auth's internals hard-code, that we'd otherwise have to get byte-perfect by hand. **Then, and only then**, hand-edit the generated `user` table to add our columns (`username`, `birthDate`, `bio`, `avatarUrl`, `phoneNumber`, `isOnline`, `lastSeenAt` — full shape in [§4](#4-the-database--what-we-store) and the [README's data model](../../README.md#6-the-data-model)), and hand-write the tables Better Auth doesn't own: `pendingRegistrations` and `authEvents` (§4 above), plus `twoFactor` if the plugin's default shape needs extending.
+
+**Why generate-then-edit instead of writing it all by hand:** the generator encodes Better Auth's internal contract. If a future version renames a column it expects on `session` or `account`, regenerating catches the drift immediately — a hand-written schema would just fail silently at runtime with cryptic "column does not exist" errors during login.
+
+### 14.4 Schema design decisions, thought through
+
+These are the calls that aren't obvious from copying a table definition — the reasoning behind *why* the schema looks the way it does.
+
+| Decision | What we chose | Why |
+|---|---|---|
+| **Primary key type** | `text("id")` (cuid/uuid string), not a serial integer | Sequential integer IDs leak growth rate (`/users/4821` tells a competitor how many signups you have) and are guessable for enumeration attacks. A random string closes both. |
+| **`PendingRegistration` vs. a stateless JWT** | A real table | Rate-limiting and "burn the code after 3 attempts" ([§6](#otp-brute-force)) require server-side state that can be decremented and deleted. A JWT can't be partially invalidated — you'd have to blocklist it, which just becomes... a table. |
+| **`otpHash` and `password` typed `text`, not `varchar(n)`** | `text`, unbounded | Hash output length is an implementation detail of the algorithm (scrypt, SHA-256). Hardcoding a `varchar(64)` bakes in an assumption that breaks silently the day the hash algorithm or encoding changes. Postgres `text` and `varchar` are stored identically — there's no performance reason to bound it. |
+| **`AuthEvent.userId` has no foreign key** | Plain `text`, unindexed as an FK | A login attempt against an email that doesn't exist yet must still be logged (that's how you catch enumeration sweeps in [§6](#user-enumeration)) — a hard FK would reject exactly the rows you most need to keep. |
+| **Cascade deletes on `session`, `account`, `conversation_member`, `message`** | `.references(() => users.id, { onDelete: "cascade" })` | If a user is deleted, their sessions and credentials becoming orphaned rows is a security bug (a "deleted" account that can still authenticate via a stale row) — not just clutter. Cascade makes deletion actually mean deletion. |
+| **`AuthEvent.type` as `text`, not a Postgres `enum`** | Plain string | Event types (`login_ok`, `otp_sent`, ...) grow over the life of the project as new checks get added. An `enum` requires a migration for every new value; a checked string constant list in application code doesn't. Contrast with `request_status` or `message_type` in the app schema, which *are* enums — those are small, closed, unlikely-to-change sets, so the extra DB-level safety is worth the migration cost. |
+| **Index on `pendingRegistrations.expiresAt`, not just `email`** | Composite reasoning, single-column index | `email` already has a unique constraint (which is itself an index). The *second* index exists purely so the nightly sweep (`DELETE ... WHERE expiresAt < NOW()`) doesn't table-scan as the row count grows — a different query shape needs a different index. |
+| **`birthDate` stored, `phoneNumber` stored but neither ever used to authenticate** | Both are plain columns, no special "sensitive" flag in the schema | Sensitivity here isn't a schema property — it's enforced at the *query* layer (never `SELECT`ed by public endpoints) and the *auth logic* layer (never checked in a login path). The schema can't stop a future developer from misusing a column; the discipline documented in [§5](#5-what-we-must-never-store) has to. |
+
+### 14.5 Connecting Better Auth to the Neon connection
+
+```js
+// db/index.js — the ONE connection every workspace imports
+const { drizzle } = require("drizzle-orm/neon-http");
+const { neon } = require("@neondatabase/serverless");
+const schema = require("./schema");
+
+const sql = neon(process.env.DATABASE_URL);
+const db = drizzle(sql, { schema });
+
+module.exports = { db };
+```
+
+```ts
+// web/src/lib/auth.ts — Better Auth reuses that same connection, doesn't open its own
+import { db } from '../../../db';
+import * as schema from '../../../db/schema';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, { provider: 'pg', schema }),
+  // ...rest of the config in §12
+});
+```
+
+**Why this matters more than it looks:** if `web/` opened its own `neon()` connection instead of importing the shared `db`, we'd have two independent connection pools talking to the same tables. Nothing breaks immediately — Postgres handles concurrent connections fine — but it defeats the entire "one schema, one source of truth" argument from §14.2, and it's easy to accidentally drift the two connections' `schema` imports out of sync after an edit.
+
+### 14.6 Getting the tables into Neon
+
+```bash
+npx drizzle-kit push        # early development: fast, no migration files
+```
+
+Once real user data exists, switch to the reviewable path — `push` can drop/recreate a column if it detects a shape it can't reconcile, which is fine on an empty dev database and *not* fine on one with live sessions and password hashes in it:
+
+```bash
+npx drizzle-kit generate     # writes drizzle/0001_xxx.sql — read it before applying
+npx drizzle-kit migrate      # applies it
+```
+
+**Rule of thumb:** `push` until the first real signup happens in production; `generate` + `migrate` after. This is also the point at which the nightly `PendingRegistration` sweep ([§4](#4-the-database--what-we-store)) needs to actually be scheduled — a cron hitting the same `db` object, not a separate connection.
+
+### 14.7 The Socket.IO server side of the same connection
+
+The socket server (`server/`, plain JS, port 4000) validates sessions by querying the *same* `db` and the *same* `session` table Better Auth writes to — not a copy, not an API call back to Next.js:
+
+```js
+// server/src/middleware/auth.js
+const { db } = require("../../../db");
+const { session } = require("../../../db/schema");
+const { eq, and, gt } = require("drizzle-orm");
+
+async function authenticateSocket(cookieToken) {
+  const [row] = await db
+    .select()
+    .from(session)
+    .where(and(eq(session.token, cookieToken), gt(session.expiresAt, new Date())));
+  return row ?? null;
+}
+```
+
+This is what makes revocation instant across both servers ([§7](#7-sessions-cookies-and-the-socketio-server)): deleting a `session` row is visible to the socket server on its *very next* handshake check, because there was never a second copy of session state to go stale.
+
+### 14.8 Verifying the whole chain
+
+```bash
+npx drizzle-kit studio     # confirm user / session / account / verification / pending_registration all exist
+```
+
+Then, end to end: sign up a test account → confirm a `User` row with `emailVerified = true` appears → confirm a matching `Account` row has a **hashed**, not plaintext, password → open the socket connection in the browser devtools and confirm it authenticates → delete the `Session` row in Studio → confirm the open socket disconnects immediately. If that last step doesn't disconnect the socket, the socket server is caching session state somewhere instead of reading `db` live — go find where.
 
 ---
 
