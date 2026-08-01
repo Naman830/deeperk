@@ -1,0 +1,13 @@
+# Top-level safety net. web/ and server/ each have their own .gitignore too;
+# this covers anything created at the repo root.
+
+node_modules/
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# misc
+.DS_Store
+*.pem
+*.log
