@@ -117,7 +117,7 @@ Two languages, split by workspace: the **frontend is TypeScript**, the **backend
 | **Redis** | Shared memory between multiple servers | We have *one* server. A plain JavaScript `Map` is our cache and it's faster. |
 | **mediasoup / LiveKit (SFU)** | Relays video so 50 people can call | Our cap is 4. Peer-to-peer handles that natively. |
 | **Kafka / RabbitMQ** | Message queues between services | We have no services to queue between. |
-| **Docker for the app** | Containerizing Next.js and the socket server | Adds a rebuild step to every code change during development. We *do* use Docker for Postgres, because that saves real setup pain. |
+| **Docker in development** | Containerizing Next.js, the socket server, or Postgres | Adds a rebuild step to every code change. Postgres itself is hosted on Neon, so there's nothing to containerize locally at all — Docker only shows up later, for production deploys ([Chapter 12](#12-production-checklist)). |
 | **Kubernetes** | Orchestrating many containers | You have twenty users. Please don't. |
 | **Elasticsearch** | Full-text message search | Postgres `ILIKE '%term%'` returns in under a millisecond on 50,000 messages. |
 
@@ -277,130 +277,143 @@ Nine tables. Better Auth creates four of them; we design five.
 
 ### `User` — extended with our profile fields
 
-```prisma
-model User {
+```js
+// db/schema.js
+const { pgTable, text, boolean, timestamp, varchar, index } = require("drizzle-orm/pg-core");
+
+const users = pgTable("user", {
   // --- Better Auth's own fields ---
-  id            String    @id @default(cuid())
-  name          String                          // display name, e.g. "Naman Kumar"
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id:            text("id").primaryKey(),
+  name:          text("name").notNull(),                      // display name, e.g. "Naman Kumar"
+  email:         text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  createdAt:     timestamp("created_at").defaultNow().notNull(),
+  updatedAt:     timestamp("updated_at").defaultNow().notNull(),
 
   // --- Fields we add ---
-  username      String    @unique               // "@naman" — what people search
-  phoneNumber   String?   @unique
-  phoneVerified Boolean   @default(false)
-  birthDate     DateTime?
-  bio           String?   @db.VarChar(200)
-  avatarUrl     String?                         // Cloudinary URL
-  isOnline      Boolean   @default(false)       // green dot
-  lastSeenAt    DateTime  @default(now())       // "last seen 5m ago"
+  username:      text("username").notNull().unique(),         // "@naman" — what people search
+  phoneNumber:   text("phone_number").unique(),
+  phoneVerified: boolean("phone_verified").default(false).notNull(),
+  birthDate:     timestamp("birth_date"),
+  bio:           varchar("bio", { length: 200 }),
+  avatarUrl:     text("avatar_url"),                           // Cloudinary URL
+  isOnline:      boolean("is_online").default(false).notNull(),// green dot
+  lastSeenAt:    timestamp("last_seen_at").defaultNow().notNull(), // "last seen 5m ago"
+}, (table) => ({
+  usernameIdx: index("username_idx").on(table.username),
+}));
 
-  // --- Relations ---
-  sentRequests     FriendRequest[]      @relation("Sender")
-  receivedRequests FriendRequest[]      @relation("Receiver")
-  memberships      ConversationMember[]
-  messages         Message[]
-
-  @@index([username])
-}
+module.exports = { users };
 ```
+
+Relations (who sent/received a friend request, who's a member of what) aren't columns on `users` — Drizzle expresses them separately with `relations()`, or you just query the related tables directly with a `where`. Shown in the next sections.
 
 **Why `username` is separate from `name`:** `name` is your display name and can be anything ("Naman 🚀"). `username` is unique, lowercase, no spaces — it's your address. Instagram works the same way.
 
 ### `FriendRequest` — the social graph
 
-```prisma
-model FriendRequest {
-  id         String        @id @default(cuid())
-  senderId   String
-  receiverId String
-  status     RequestStatus @default(PENDING)   // PENDING | ACCEPTED | REJECTED
-  createdAt  DateTime      @default(now())
+```js
+const { pgTable, text, timestamp, uniqueIndex, index, pgEnum } = require("drizzle-orm/pg-core");
 
-  sender   User @relation("Sender",   fields: [senderId],   references: [id])
-  receiver User @relation("Receiver", fields: [receiverId], references: [id])
+const requestStatus = pgEnum("request_status", ["PENDING", "ACCEPTED", "REJECTED"]);
 
-  @@unique([senderId, receiverId])   // can't spam the same person twice
-  @@index([receiverId, status])      // fast "show my pending requests"
-}
+const friendRequests = pgTable("friend_request", {
+  id:         text("id").primaryKey(),
+  senderId:   text("sender_id").notNull().references(() => users.id),
+  receiverId: text("receiver_id").notNull().references(() => users.id),
+  status:     requestStatus("status").default("PENDING").notNull(),
+  createdAt:  timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  senderReceiverUnique: uniqueIndex("sender_receiver_unique").on(table.senderId, table.receiverId), // can't spam the same person twice
+  receiverStatusIdx: index("receiver_status_idx").on(table.receiverId, table.status),                // fast "show my pending requests"
+}));
+
+module.exports = { friendRequests, requestStatus };
 ```
 
-**Design note:** one table handles both requests *and* friendships. A row with `status: ACCEPTED` **is** the friendship. Two friends have exactly one row between them, whichever direction it was sent.
+**Design note:** one table handles both requests *and* friendships. A row with `status: "ACCEPTED"` **is** the friendship. Two friends have exactly one row between them, whichever direction it was sent.
 
 To find all of someone's friends:
 
-```ts
+```js
+const { db } = require("../db");
+const { friendRequests, users } = require("../db/schema");
+const { eq, or, and } = require("drizzle-orm");
+
 // Friends = accepted requests where I'm on either side
-const friends = await prisma.friendRequest.findMany({
-  where: {
-    status: 'ACCEPTED',
-    OR: [{ senderId: myId }, { receiverId: myId }],
-  },
-  include: { sender: true, receiver: true },
-});
+const friends = await db
+  .select()
+  .from(friendRequests)
+  .where(
+    and(
+      eq(friendRequests.status, "ACCEPTED"),
+      or(eq(friendRequests.senderId, myId), eq(friendRequests.receiverId, myId))
+    )
+  );
 ```
 
 That `OR` is slightly awkward, and it's the honest cost of the one-table design. The alternative — writing two rows per friendship (A→B and B→A) — makes reads simpler but means every accept/unfriend must update two rows in sync. We chose the simpler write path.
 
 ### `Conversation` + `ConversationMember` — DMs and groups, unified
 
-```prisma
-model Conversation {
-  id          String           @id @default(cuid())
-  type        ConversationType                    // DIRECT | GROUP
-  name        String?                             // groups only
-  avatarUrl   String?                             // groups only
-  createdById String
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt         // bumped on every message
+```js
+const { pgTable, text, timestamp, primaryKey, index, pgEnum } = require("drizzle-orm/pg-core");
 
-  members  ConversationMember[]
-  messages Message[]
-  calls    CallLog[]
+const conversationType = pgEnum("conversation_type", ["DIRECT", "GROUP"]);
+const memberRole = pgEnum("member_role", ["OWNER", "ADMIN", "MEMBER"]);
 
-  @@index([updatedAt])   // sort the sidebar by most-recent
-}
+const conversations = pgTable("conversation", {
+  id:          text("id").primaryKey(),
+  type:        conversationType("type").notNull(),   // DIRECT | GROUP
+  name:        text("name"),                          // groups only
+  avatarUrl:   text("avatar_url"),                     // groups only
+  createdById: text("created_by_id").notNull().references(() => users.id),
+  createdAt:   timestamp("created_at").defaultNow().notNull(),
+  updatedAt:   timestamp("updated_at").defaultNow().notNull(), // bumped on every message
+}, (table) => ({
+  updatedAtIdx: index("updated_at_idx").on(table.updatedAt), // sort the sidebar by most-recent
+}));
 
-model ConversationMember {
-  conversationId String
-  userId         String
-  role           MemberRole @default(MEMBER)   // OWNER | ADMIN | MEMBER
-  joinedAt       DateTime   @default(now())
-  lastReadAt     DateTime   @default(now())    // ← powers unread badges
+const conversationMembers = pgTable("conversation_member", {
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  userId:         text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role:           memberRole("role").default("MEMBER").notNull(),
+  joinedAt:       timestamp("joined_at").defaultNow().notNull(),
+  lastReadAt:     timestamp("last_read_at").defaultNow().notNull(), // ← powers unread badges
+}, (table) => ({
+  pk: primaryKey({ columns: [table.conversationId, table.userId] }), // you're in a conversation once
+  userIdx: index("member_user_idx").on(table.userId),                 // fast "list all my chats"
+}));
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([conversationId, userId])   // you're in a conversation once
-  @@index([userId])                // fast "list all my chats"
-}
+module.exports = { conversations, conversationMembers, conversationType, memberRole };
 ```
 
 **Why DMs and groups share one table:** a DM is just a group with exactly two members and no name. Using one structure means chat rendering, message sending, and history loading are written *once* instead of twice. This is the single biggest simplification in the whole schema.
 
 ### `Message`
 
-```prisma
-model Message {
-  id             String      @id @default(cuid())
-  conversationId String
-  senderId       String
-  type           MessageType @default(TEXT)   // TEXT | IMAGE | VIDEO | FILE | SYSTEM
-  body           String?     @db.Text         // text content
-  mediaUrl       String?                      // Cloudinary URL
-  mediaMime      String?                      // "image/png"
-  mediaSize      Int?                         // bytes
-  mediaName      String?                      // original filename
-  createdAt      DateTime    @default(now())
-  deletedAt      DateTime?                    // soft delete
+```js
+const { pgTable, text, integer, timestamp, index, pgEnum } = require("drizzle-orm/pg-core");
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User         @relation(fields: [senderId], references: [id])
+const messageType = pgEnum("message_type", ["TEXT", "IMAGE", "VIDEO", "FILE", "SYSTEM"]);
 
-  @@index([conversationId, createdAt])   // ← the most important index in the app
-}
+const messages = pgTable("message", {
+  id:             text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  senderId:       text("sender_id").notNull().references(() => users.id),
+  type:           messageType("type").default("TEXT").notNull(),
+  body:           text("body"),           // text content
+  mediaUrl:       text("media_url"),       // Cloudinary URL
+  mediaMime:      text("media_mime"),      // "image/png"
+  mediaSize:      integer("media_size"),   // bytes
+  mediaName:      text("media_name"),      // original filename
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
+  deletedAt:      timestamp("deleted_at"), // soft delete
+}, (table) => ({
+  conversationCreatedIdx: index("conversation_created_idx").on(table.conversationId, table.createdAt), // ← the most important index in the app
+}));
+
+module.exports = { messages, messageType };
 ```
 
 **That index is doing real work.** Every time you open a chat we run "give me the newest 30 messages in conversation X." Without the index, Postgres scans every message ever sent. With it, the answer is instant. It stays instant at a million messages.
@@ -411,19 +424,24 @@ model Message {
 
 ### `CallLog`
 
-```prisma
-model CallLog {
-  id             String     @id @default(cuid())
-  conversationId String
-  startedById    String
-  kind           CallKind                    // AUDIO | VIDEO
-  status         CallStatus @default(RINGING) // RINGING | ONGOING | ENDED | MISSED | REJECTED
-  startedAt      DateTime   @default(now())
-  endedAt        DateTime?
-  participantIds String[]
+```js
+const { pgTable, text, timestamp, pgEnum } = require("drizzle-orm/pg-core");
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-}
+const callKind = pgEnum("call_kind", ["AUDIO", "VIDEO"]);
+const callStatus = pgEnum("call_status", ["RINGING", "ONGOING", "ENDED", "MISSED", "REJECTED"]);
+
+const callLogs = pgTable("call_log", {
+  id:             text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  startedById:    text("started_by_id").notNull().references(() => users.id),
+  kind:           callKind("kind").notNull(),
+  status:         callStatus("status").default("RINGING").notNull(),
+  startedAt:      timestamp("started_at").defaultNow().notNull(),
+  endedAt:        timestamp("ended_at"),
+  participantIds: text("participant_ids").array().notNull().default([]),
+});
+
+module.exports = { callLogs, callKind, callStatus };
 ```
 
 This is what renders *"📞 Missed video call · 2:14 PM"* in the chat history.
@@ -436,14 +454,21 @@ The "proper" design is a `MessageRead` table with one row per message per person
 
 We store a single timestamp per member instead:
 
-```ts
-const unread = await prisma.message.count({
-  where: {
-    conversationId,
-    createdAt: { gt: member.lastReadAt },
-    senderId:  { not: myId },
-  },
-});
+```js
+const { db } = require("../db");
+const { messages } = require("../db/schema");
+const { count, and, eq, gt, ne } = require("drizzle-orm");
+
+const [{ unread }] = await db
+  .select({ unread: count() })
+  .from(messages)
+  .where(
+    and(
+      eq(messages.conversationId, conversationId),
+      gt(messages.createdAt, member.lastReadAt),
+      ne(messages.senderId, myId)
+    )
+  );
 ```
 
 - **You gain:** an entire table you never have to write, index, or clean up.
@@ -1092,7 +1117,7 @@ Step 3 is the important one. Check it's rejected **by the server** — try emitt
 
 ```bash
 npm run typecheck      # must be clean
-npx prisma studio      # eyeball the actual rows after each test run
+npx drizzle-kit studio # eyeball the actual rows after each test run
 ```
 
 - **Deny camera permission** → you should get a clear error, not a white screen
@@ -1111,7 +1136,7 @@ None of this is needed for localhost. All of it matters before real people use i
 - [ ] **Real secrets.** Fresh `BETTER_AUTH_SECRET` (`openssl rand -base64 32`), a strong database password. Never reuse dev values.
 - [ ] **`.env` never committed.** Verify with `git check-ignore .env`.
 - [ ] **Lock down CORS.** The socket server should accept your domain only, not `*`.
-- [ ] **Database backups.** `pg_dump` on a nightly cron. Test that a restore actually works — an untested backup is not a backup.
+- [ ] **Database backups.** Neon takes automatic point-in-time backups on paid plans — confirm your plan's retention window, and test a restore at least once so you know the process before you need it.
 - [ ] **Rate limits on auth routes.** Login and OTP endpoints are the ones that get brute-forced.
 - [ ] **Real OTP delivery.** Swap the `console.log` for Resend (3,000 emails/month free) or Twilio.
 
@@ -1125,19 +1150,14 @@ None of this is needed for localhost. All of it matters before real people use i
 
 ### A minimal production deployment
 
-One small VPS (Hetzner/DigitalOcean, ~$5/month) running everything:
+One small VPS (Hetzner/DigitalOcean, ~$5/month) running the two app processes — Postgres itself is Neon, so it's not a container you manage:
 
 ```yaml
 # docker-compose.prod.yml
 services:
-  postgres:
-    image: postgres:18-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    restart: unless-stopped
-
   web:
     build: ./web
-    environment: [DATABASE_URL, BETTER_AUTH_SECRET, ...]
+    environment: [DATABASE_URL, BETTER_AUTH_SECRET, ...]   # DATABASE_URL points at Neon
     restart: unless-stopped
 
   socket:
@@ -1149,9 +1169,6 @@ services:
     ports: ["80:80", "443:443"]
     volumes: [./Caddyfile:/etc/caddy/Caddyfile]
     restart: unless-stopped
-
-volumes:
-  pgdata:
 ```
 
 ```
@@ -1327,11 +1344,11 @@ Kafka/RabbitMQ/BullMQ decouple "accept the request" from "do the slow thing" —
 
 ### Troubleshooting — the ten you will actually hit
 
-**1. `Can't reach database server at localhost:5432`**
-Postgres isn't running. `docker compose up -d`, then `docker compose ps` to confirm it says healthy.
+**1. `Can't reach database server`**
+Check `DATABASE_URL` in `.env` matches the connection string from your Neon dashboard exactly, and that it ends in `?sslmode=require`. Neon can also pause an idle project on the free tier — the next query auto-wakes it, but the very first one may time out; just retry.
 
 **2. Socket won't connect / CORS error in the console**
-The socket server's allowed origin doesn't match. Check `NEXT_PUBLIC_SOCKET_URL` in `.env` and the `cors.origin` in `server/src/index.ts`. `localhost` and `127.0.0.1` are *different origins* to a browser — pick one and use it everywhere.
+The socket server's allowed origin doesn't match. Check `NEXT_PUBLIC_SOCKET_URL` in `.env` and the `cors.origin` in `server/src/index.js`. `localhost` and `127.0.0.1` are *different origins* to a browser — pick one and use it everywhere.
 
 **3. Camera works on localhost, breaks when deployed**
 You're on HTTP. `getUserMedia()` requires HTTPS everywhere except localhost. This is a hard browser rule, not a bug. Set up Caddy.
@@ -1354,11 +1371,11 @@ useEffect(() => {
 }, []);
 ```
 
-**7. `Unique constraint failed on the fields: (username)`**
-That username is taken. Check availability as they type, and catch Prisma's `P2002` error code for a friendly message.
+**7. `duplicate key value violates unique constraint "user_username_unique"`**
+That username is taken. Check availability as they type, and catch Postgres's unique-violation error (code `23505`) for a friendly message instead of a raw crash.
 
-**8. Prisma types are wrong after a schema change**
-Run `npx prisma generate`. If your editor still complains, restart the TypeScript server (VS Code: Cmd/Ctrl+Shift+P → "Restart TS Server").
+**8. Tables in Neon don't match `db/schema.js`**
+You edited the schema but forgot to sync it. Run `npx drizzle-kit push` again — there's no separate "generate" step like Prisma has, `push` is the whole sync.
 
 **9. Online status is stuck on for someone who left**
 Their socket didn't fire `disconnect` — a laptop that slept, or a hard network drop. Socket.IO's ping timeout catches this after ~20 seconds. If it's permanently stuck, your disconnect handler probably threw an exception before reaching the database update.
@@ -1374,7 +1391,7 @@ Build in this order. Each phase ends with something you can actually click, whic
 
 | # | Phase | You'll learn | Done when you can… |
 |---|---|---|---|
-| **0** | Scaffold + Docker + Prisma | Monorepos, migrations, env config | See "hello" from both ports |
+| **0** | Scaffold + Neon + Drizzle | Monorepos, migrations, env config | See "hello" from both ports |
 | **1** | Auth + profile | Sessions, cookies, password hashing, file upload | Log in and change your bio |
 | **2** | Search + friend requests | Indexed queries, relational state machines | Add a friend |
 | **3** | 1-on-1 chat | **WebSockets, rooms, optimistic UI, pagination** | Chat live in two browsers |
@@ -1396,7 +1413,7 @@ Build in this order. Each phase ends with something you can actually click, whic
 ### Advice
 
 - **Don't skip ahead.** Phase 6 depends on the socket infrastructure from Phase 3.
-- **Use `npx prisma studio` constantly.** Seeing the real rows kills whole categories of confusion.
+- **Use `npx drizzle-kit studio` constantly.** Seeing the real rows kills whole categories of confusion.
 - **Keep two browsers open the entire time you work.** You'll catch bugs the instant you make them.
 - **Read the errors.** WebRTC errors in particular are unusually specific — they tell you which step failed.
 - **When stuck on WebRTC**, `console.log(pc.connectionState)` and `pc.iceConnectionState`. They tell you exactly which of the ten steps you're on.
