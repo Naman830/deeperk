@@ -2,6 +2,8 @@
 
 Picks up where [`auth.md`](./auth.md) stops (Step 9: avatar + bio, skippable). Two screens: the public profile (`/u/[username]`) is what others see; Settings (`/settings`) is what only the owner sees — built from a different query than the public one, so a private field can never leak by accident.
 
+**No relationship graph yet.** There's no Follow/Friend system in this version — any user can view any public profile and message any other user directly, no connection required. Followers/Following is designed on paper for later (§7) but not built.
+
 ---
 
 ## 1. Tech Stack
@@ -30,15 +32,6 @@ flowchart TD
         ACloud --> AStore["Store public_id · delete old asset"]
     end
 
-    subgraph Follow["Follow / Unfollow"]
-        FBtn["Click Follow"] -->|"POST /follow · 60/hr"| FCheck{"'Who can follow me'<br/>toggle allows it?"}
-        FCheck -->|No| FErr["403"]
-        FCheck -->|Yes| FInsert["Insert (followerId, followingId)"]
-        FInsert --> FMutual{"Reverse row<br/>already exists?"}
-        FMutual -->|Yes| FFriend["Both users are now 'Friends'"]
-        FMutual -->|No| FOneWay["One-way follow"]
-    end
-
     subgraph EmailChange["Change Email"]
         EPass["Confirm password"] --> ENew["Type new email"]
         ENew -->|"3/hr"| EOtp["OTP to the NEW address<br/>3 attempts, 5min TTL"]
@@ -65,9 +58,8 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 | Table | Owner | Key fields |
 |---|---|---|
 | `user` | Better Auth + ours | `firstName`, `lastName`, `username` (unique, lowercase), `displayUsername`, `bio`, `avatarPublicId`, `usernameChangedAt`, `deactivatedAt`, `deletionScheduledAt` |
-| `follow` | ours | `followerId`, `followingId` — composite PK, indexed on both columns |
 | `social_link` | ours | `userId`, `platform`, `url` — max 4 rows per user, enforced in the route, not the schema |
-| `privacy_settings` | ours | `discoverable`, `canFollow`, `onlineStatus`, `profileDetails` — each `EVERYONE / FRIENDS / NOBODY` |
+| `privacy_settings` | ours | `discoverable`, `onlineStatus`, `profileDetails` — each `EVERYONE / NOBODY` (no `FRIENDS` tier — there's no relationship graph yet, see §7) |
 | `pending_contact_change` | ours | mirrors `pending_registration` (auth.md §3) — `userId`, `type: EMAIL\|PHONE`, `newValue`, `otpHash`, `attempts`, `expiresAt` |
 
 `avatarPublicId` stores a Cloudinary `public_id`, never a full URL — the delivery URL (`w_512,h_512,c_fill,g_face,f_auto,q_auto/<public_id>`) is built at render time, so changing the transform later never requires touching stored data.
@@ -99,13 +91,6 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 | Rate limit exceeded (10/hr) | 429, "try again later" |
 | Old Cloudinary asset fails to delete | New avatar still shows; orphan swept by a nightly cleanup job |
 
-**Follow**
-| Scenario | What happens |
-|---|---|
-| Target's "who can follow me" = Nobody | 403, button shows disabled after refresh |
-| Already following | No-op, not an error |
-| Follows self | Rejected at the route |
-
 **Change Email**
 | Scenario | What happens |
 |---|---|
@@ -130,7 +115,6 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 | Update profile fields (name, bio, links) | 30/hour per user |
 | Change username | 1 / 30 days |
 | Avatar upload | 10/hour per user |
-| Follow / Unfollow | 60/hour per user |
 | Email change: start / verify | 3/hour · 10/hour per user |
 | Phone change: start / verify | 3/day · 10/hour per user |
 | Confirm-password gate | 5 / 15min per user |
@@ -144,8 +128,10 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 
 **2FA (TOTP).** Already specced in auth.md §7 — same `twoFactor` Better Auth plugin, same QR-code + backup-codes flow. The only piece that belongs to this document is the Settings entry point (an enable/disable row linking into that flow).
 
-**Private account toggle.** A single account-wide switch that would make Follow require approval — an incoming-request queue, accept/reject actions, existing followers grandfathered in. Deferred because it roughly doubles §2's Follow flow; every account is public and follow is instant for now. Add a `visibility` enum on `user` when this is prioritized.
+**Followers / Following.** One-way follow (Instagram-style, no approval needed): a `follow` table (`followerId`, `followingId`, composite PK, indexed both directions). Click Follow → insert a row, rate-limited (e.g. 60/hr, plus a daily cap to blunt follow-spam bots) → check the target's "who can follow me" toggle server-side first. Define **"Friend"** as a *mutual* follow — both directions exist in the same table, no separate friends table needed. That mutual state is what would bring the `FRIENDS` tier back to the privacy toggles in §3, which only offer `EVERYONE / NOBODY` until this exists. Also needs, from day one: an Unfollow action, a self-follow guard, and a way to remove one unwanted follower without blocking global follow access.
 
-**Friends-of-friends privacy tier.** Needs a 2-hop query over the `follow` table, which is a real cost at scale — dropped from the three-option privacy toggles (§4) until there's an actual social graph worth querying.
+**Private account toggle.** Depends on Followers/Following (above) existing first — turns Follow from instant into request-and-approve, with existing followers grandfathered in. Add a `visibility` enum on `user` when this is prioritized.
+
+**Friends-of-friends privacy tier.** Same dependency — needs a 2-hop query over the `follow` table, which is a real cost at scale. Worth reconsidering only once there's an actual social graph to query.
 
 **Automated content moderation.** Bio's "no hate speech / illegal content" rule is enforced by user reports only right now. Automated text moderation (and image moderation on avatars) is reasonable to add once a provider is chosen — no vendor picked yet, so nothing to build against.
