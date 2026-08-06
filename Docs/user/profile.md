@@ -124,7 +124,7 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 
 ## 7. Future Work — Not Built Yet
 
-**Deactivate.** A softer alternative to Delete — "hide me for a while," not "delete me." `deactivatedAt = now()` pulls the account out of search and friend suggestions, shows "This account is unavailable" on the profile, and revokes every session, but touches no other row. Logging back in un-hides it instantly, no waiting period. Kept as a separate button from Delete on purpose — merging them is how someone permanently destroys an account they only wanted to hide for a week.
+**Deactivate.** A softer alternative to Delete — "hide me for a while," not "delete me." `deactivatedAt = now()` pulls the account out of search, shows "This account is unavailable" on the profile, and revokes every session, but touches no other row. Logging back in un-hides it instantly, no waiting period. Kept as a separate button from Delete on purpose — merging them is how someone permanently destroys an account they only wanted to hide for a week.
 
 **2FA (TOTP).** Already specced in auth.md §7 — same `twoFactor` Better Auth plugin, same QR-code + backup-codes flow. The only piece that belongs to this document is the Settings entry point (an enable/disable row linking into that flow).
 
