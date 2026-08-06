@@ -14,7 +14,7 @@ Login and Signup are two separate pages (not a single "one door" email screen). 
 | **Email** | Resend (OTP + reset codes) |
 | **Auth** | Better Auth (sessions, password hashing via `scrypt`, rate limiting) |
 
-**Worth adding:** `zod` for validating the signup/login form payloads on the server — pairs naturally with Drizzle and keeps field rules (below) enforced in one place instead of copy-pasted per route.
+**Already implemented:** `zod` validates the signup/login form payloads on the server — pairs naturally with Drizzle and keeps field rules (below) enforced in one place instead of copy-pasted per route.
 
 ---
 

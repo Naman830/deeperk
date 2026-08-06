@@ -1,6 +1,6 @@
 # Profile & Settings — Who You Are on ChatSphere
 
-Picks up where [`auth.md`](./auth.md) stops (Step 9: avatar + bio, skippable). Two screens: the public profile (`/u/[username]`) is what others see; Settings (`/settings`) is what only the owner sees — built from a different query than the public one, so a private field can never leak by accident.
+Picks up after signup completes in [`auth.md`](./auth.md). Users enter the app immediately — avatar and bio are optional and can be edited later in Settings. Two screens: the public profile (`/u/[username]`) is what others see; Settings (`/settings`) is what only the owner sees — built from a different query than the public one, so a private field can never leak by accident.
 
 **No relationship graph yet.** There's no Follow/Friend system in this version — any user can view any public profile and message any other user directly, no connection required. Followers/Following is designed on paper for later (§7) but not built.
 
@@ -60,7 +60,7 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 | `user` | Better Auth + ours | `firstName`, `lastName`, `username` (unique, lowercase), `displayUsername`, `bio`, `avatarPublicId`, `usernameChangedAt`, `deactivatedAt`, `deletionScheduledAt` |
 | `social_link` | ours | `userId`, `platform`, `url` — max 4 rows per user, enforced in the route, not the schema |
 | `privacy_settings` | ours | `discoverable`, `onlineStatus`, `profileDetails` — each `EVERYONE / NOBODY` (no `FRIENDS` tier — there's no relationship graph yet, see §7) |
-| `pending_contact_change` | ours | mirrors `pending_registration` (auth.md §3) — `userId`, `type: EMAIL\|PHONE`, `newValue`, `otpHash`, `attempts`, `expiresAt` |
+| `pending_contact_change` | ours | mirrors `pending_registration` (auth.md §3) — `userId`, `type: EMAIL`, `newValue`, `otpHash`, `attempts`, `expiresAt` |
 
 `avatarPublicId` stores a Cloudinary `public_id`, never a full URL — the delivery URL (`w_512,h_512,c_fill,g_face,f_auto,q_auto/<public_id>`) is built at render time, so changing the transform later never requires touching stored data.
 
@@ -77,7 +77,6 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 | **Avatar** | jpg / png / webp, ≤5MB, ≥200×200, cropped 1:1, EXIF stripped |
 | **Social Links** | up to 4, any platform, duplicates allowed, must be a valid `http(s)` URL |
 | **Email** | same rule as auth.md §4; changing it requires password + OTP to the new address |
-| **Phone** | E.164 format, verified via SMS OTP, badge-only — grants no auth power (auth.md §4 rejects SMS as a factor) |
 
 ---
 
@@ -116,7 +115,6 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 | Change username | 1 / 30 days |
 | Avatar upload | 10/hour per user |
 | Email change: start / verify | 3/hour · 10/hour per user |
-| Phone change: start / verify | 3/day · 10/hour per user |
 | Confirm-password gate | 5 / 15min per user |
 | Schedule deletion | 3/day per user |
 
