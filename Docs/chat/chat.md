@@ -1,0 +1,231 @@
+# Chat — Direct Messages & Groups on ChatSphere
+
+Picks up after [`profile.md`](./profile.md). This is the first thing built on the **second server** — `server/` currently holds nothing but an Express "Hello World" on port 5000; this doc is the spec for turning it into the Socket.IO real-time server described in the root [`README.md`](../../README.md) §4, on port 4000.
+
+**Messaging model: open DMs.** Per `profile.md` §"No relationship graph yet," there is no Follow/Friend system built. Any user can message any other user directly — no request, no acceptance step. `privacy_settings.friendRequests` and the `FRIENDS` / `FRIENDS_OF_FRIENDS` audience tiers already exist as columns (`db/schema/auth/index.js` → `privacy-settings.js`) but are inert until a relationship graph exists (`profile.md` §7) — chat treats them as `EVERYONE` for now. When Follow/Friend ships, the upgrade is a single new gate check in `startConversation`, nothing in this doc's data model changes.
+
+**Groups build on the same model.** Nothing gates who a `MEMBER`/`ADMIN`/`OWNER` can add to a group either — see §5 for why that's a real spam surface at this stage and what's deliberately deferred.
+
+---
+
+## 1. Tech Stack
+
+| Layer | What we use |
+|---|---|
+| **Frontend** | Next.js · `socket.io-client` (one shared connection per tab, see §2.1) · `react-toastify` (reuse from auth.md §1, for message toasts) |
+| **Realtime backend** | Node.js + Express + `socket.io` — a **separate process** from the Next.js app (`server/`, port `4000`), per README §4. Talks to Next.js once per socket connection to resolve the Better Auth session cookie (§2.1) |
+| **Media (chat)** | Cloudinary — same SDK and pattern as `profile.md`'s avatar pipeline (`sharp` real-format check, EXIF strip), new folder/preset for message attachments |
+| **Database** | Neon (serverless Postgres) · Drizzle ORM — same instance as auth.md / profile.md |
+| **Rate limiting** | In-memory `Map`, same reasoning as README §8.3/8.5 — one server, so no Redis needed yet (README §13.1 is the documented upgrade path) |
+
+**Already available to build on:** `user.isOnline` / `user.lastSeenAt` (presence columns already exist in `db/schema/auth/user.js`) and `privacy_settings.onlineStatus` (audience gate on who sees them) — chat doesn't need to add either, just read and update them.
+
+---
+
+## 2. The Flow
+
+### 2.1 Connecting — how the socket server knows who you are
+
+```mermaid
+flowchart TD
+    Open["Browser opens socket to :4000<br/>(Better Auth session cookie sent automatically)"] --> Ask["Server: GET web:3000/api/auth/get-session<br/>with that cookie"]
+    Ask --> Valid{"Valid session?"}
+    Valid -->|No| Reject["Connection rejected"]
+    Valid -->|Yes| Attach["socket.user = { id, username }<br/>join room user:&lt;id&gt;<br/>join room conversation:&lt;id&gt; for every conversation they're in"]
+    Attach --> Mark["isOnline = true (if first tab, §2.4)<br/>broadcast presence:online"]
+```
+
+Same handshake as README §4 — one internal HTTP round-trip per connection (~5ms), not a shared JWT secret. Every event on that socket is now known to belong to that user; the client can never claim to be someone else.
+
+### 2.2 Starting a conversation (open DM)
+
+```mermaid
+flowchart TD
+    Click["Click 'Message' on someone's profile or a search result"] --> Check{"DIRECT conversation<br/>already exists between us?"}
+    Check -->|Yes| Open["Open it, load history (§2.5)"]
+    Check -->|No| Create["POST /api/conversations/direct { userId }"]
+    Create --> Insert["conversation (type: DIRECT) + 2 conversation_member rows"]
+    Insert --> Open
+```
+
+No accept/reject step — this is the direct consequence of the open-DM model. The only server-side gate is `discoverable` (profile.md §3) — you can't start a DM with someone whose privacy setting hides them from you in the first place, same rule search already applies.
+
+### 2.3 Creating a group
+
+```mermaid
+flowchart TD
+    GStart["Pick a name + up to 19 other members<br/>(any user — open model, see §5)"] --> GCreate["POST /api/conversations/group { name, memberIds }"]
+    GCreate --> GValidate{"2–20 members total,<br/>name 1–50 chars?"}
+    GValidate -->|No| GErr["Rejected, inline error"]
+    GValidate -->|Yes| GInsert["conversation (type: GROUP) row<br/>creator → role OWNER<br/>everyone else → role MEMBER"]
+    GInsert --> GSystem["SYSTEM message: '&lt;name&gt; created the group'"]
+    GSystem --> GNotify["Everyone added gets a toast + the group<br/>appears in their sidebar immediately"]
+```
+
+Members are added directly, not invited — consistent with the open-DM model (there's no relationship to check). §5 covers why this is flagged as a near-term follow-up, not a launch blocker.
+
+### 2.4 Sending a message
+
+```mermaid
+flowchart TD
+    Type["Press Enter"] --> Optimistic["Bubble renders instantly with a tempId<br/>and a clock icon (optimistic update)"]
+    Optimistic --> Emit["socket.emit('message:send', { conversationId, text, tempId })"]
+    Emit --> SAuth{"Socket authenticated?"}
+    SAuth -->|No| SReject["Rejected"]
+    SAuth -->|Yes| SMember{"Sender is a member<br/>of this conversation?"}
+    SMember -->|No| SReject
+    SMember -->|Yes| SLen{"1–4000 chars?"}
+    SLen -->|No| SReject
+    SLen -->|Yes| SRate{"Under 30 msgs / 10s?"}
+    SRate -->|No| SRateErr["'Slow down' error to sender only"]
+    SRate -->|Yes| SSave["INSERT message row<br/>UPDATE conversation.updatedAt"]
+    SSave --> SBroadcast["emit 'message:new' to room conversation:&lt;id&gt;"]
+    SBroadcast --> SSelf["Sender: swap tempId's clock → ✓"]
+    SBroadcast --> SOther["Everyone else: render bubble,<br/>badge/toast/sound per §6"]
+```
+
+Membership check (`SMember`) is the one line that matters most in this whole doc: without it, anyone who learns a `conversationId` could post into a conversation they were never added to. Never trust the client's claim about which room it's in — same principle as README §8.3.
+
+### 2.5 Loading history & unread state
+
+```
+Open a conversation
+   → HTTP GET /api/conversations/:id/messages?before=<cursor>&limit=30
+   → cursor-paginated by (createdAt, id), newest 30 first, scroll up for older
+   → on open: conversation_member.lastReadAt = now()  (powers the unread badge, §4)
+```
+
+Live messages arrive over the socket; history is a bulk HTTP fetch — same split as README §5.
+
+### 2.6 Presence & typing
+
+```
+Socket connects   → isOnline = true  → broadcast presence:online   (only if onlineStatus allows the viewer, per privacy_settings)
+Socket disconnects → isOnline = false, lastSeenAt = now() → broadcast presence:offline
+
+You type       → socket.emit('typing:start') → relayed to the conversation room
+You pause 2s   → socket.emit('typing:stop')
+```
+
+Typing state is never persisted — meaningless a second later, same as README §8.4.
+
+**Multi-tab:** presence uses the same in-memory `Map<userId, Set<socketId>>` counter as README §8.4 — first tab connecting flips you online, last tab disconnecting flips you offline. This lives in `server/src/presence.js`; it's the documented single-server assumption, see README §13.1 for the Redis upgrade path.
+
+**Privacy:** `presence:*` events and `lastSeenAt` in any API response are filtered server-side by the recipient's `privacy_settings.onlineStatus` before they leave the server — never hidden client-side only (profile.md §1's rule: "enforced in the API, never in the UI").
+
+### 2.7 Sending media in chat
+
+Same pipeline as profile.md's avatar upload, different bucket:
+
+```
+Pick file → client-side size/type check (courtesy only)
+   → POST /api/upload/chat-media  (multipart)
+   → SERVER: logged in? member of the target conversation? sharp confirms real
+     format (image/video/file, size caps in §4)? rate limit (10/min, profile.md-style)?
+   → Cloudinary upload → { url, mime, size }
+   → socket.emit('message:send', { type: 'IMAGE'|'VIDEO'|'FILE', mediaUrl, ... })
+   → same path as §2.4 from here
+```
+
+---
+
+## 3. Realtime Server Shape
+
+```
+server/src/
+├── index.js          ← boots Express + Socket.IO on SOCKET_PORT (4000, not the current placeholder 5000)
+├── auth.js            ← the handshake in §2.1 — verifies the session cookie once per connection
+├── presence.js         ← the online-users Map (§2.6)
+└── handlers/
+    ├── chat.js          ← message:send, typing:start/stop, conversation:read
+    └── notify.js         ← fan-out for toasts/badges (§6)
+```
+
+`server/src/index.js` today is a bare `Hello World` on port 5000 (leftover scaffold) — this is the first real feature built on it. CORS on the Socket.IO server is locked to the web app's origin only, per README §12's production checklist.
+
+---
+
+## 4. Database
+
+New tables, all in `db/schema/chat/`, following the same `text("id").primaryKey()` + per-domain `index.js` barrel pattern as `db/schema/auth` and `db/schema/profile`.
+
+| Table | Key fields |
+|---|---|
+| `conversation` | `id`, `type` (`DIRECT` \| `GROUP`), `name` (groups only), `avatarUrl` (groups only, Cloudinary), `createdById`, `createdAt`, `updatedAt` (bumped on every message — sorts the sidebar) |
+| `conversation_member` | `conversationId`, `userId`, `role` (`OWNER` \| `ADMIN` \| `MEMBER`), `joinedAt`, `lastReadAt` — composite PK on `(conversationId, userId)` |
+| `message` | `id`, `conversationId`, `senderId`, `type` (`TEXT` \| `IMAGE` \| `VIDEO` \| `FILE` \| `SYSTEM`), `body`, `mediaUrl`, `mediaMime`, `mediaSize`, `mediaName`, `createdAt`, `deletedAt` (soft delete) |
+
+Indexes that matter: `(conversationId, createdAt)` on `message` — every chat open runs "newest 30 in conversation X"; `(userId)` on `conversation_member` — "list all my chats." Both called out explicitly because README §6 flags them as the ones that turn a 1ms query into a full table scan if forgotten.
+
+**Unread counts** come from `lastReadAt`, not a per-message read-receipt table — same trade-off as README §6, same honest cost: you get an unread *count*, not per-person "seen by" ticks in groups. Revisit only once Follow/Friend (profile.md §7) makes group social features worth the extra writes.
+
+**DM vs. group, one table:** a DIRECT conversation is a GROUP-shaped row with exactly 2 members and no name — chat rendering, sending, and history loading are written once, not twice. Directly reused from README §6.
+
+---
+
+## 5. Group Membership — the one open question worth flagging
+
+Because there's no Follow/Friend graph, a `MEMBER`/`ADMIN`/`OWNER` can add **any** user to a group directly, with no invite/accept step. That's consistent with open DMs, but it's a real spam surface the moment this has more than a handful of trusted users — someone could add a stranger to a group repeatedly.
+
+**What's shipping now (MVP, matches the "don't build for scale you don't have" philosophy):** direct-add, `Leave Group` always available, group creation rate-limited (§7).
+
+**What's deliberately not built, and why it's fine to defer:** a `Block` feature and a "who can add me to groups" privacy gate (the natural `groupInvites` sibling to `privacy_settings.friendRequests`). Neither is hard, but neither matters until there are enough users that spam-adding is a real annoyance rather than a hypothetical. Flagging it here so it doesn't get forgotten — recommend building `Block` before this goes past a handful of trusted testers.
+
+---
+
+## 6. Notifications (cross-cutting, reused by calls later)
+
+Same four layers as README §8.6 — unread badge (`COUNT WHERE createdAt > lastReadAt`), toast, tab-title blink, sound — gated on whether the recipient is currently looking at that conversation:
+
+```
+message:new arrives
+   → viewing this conversation right now?  YES → render only, mark read, no noise
+                                             NO  → badge + toast + sound (+ tab title if hidden)
+```
+
+No Web Push (needs a service worker + VAPID + permission prompt) — README §13.6 territory, not this phase.
+
+---
+
+## 7. Rate Limits
+
+| Action | Limit |
+|---|---|
+| Send message | 30 / 10 seconds per user |
+| Start a DM | 20 / hour per user (spam-conversation guard) |
+| Create a group | 5 / day per user |
+| Upload chat media | 10 / minute per user |
+| Mark-as-read ping | not rate limited — cheap, idempotent |
+
+---
+
+## 8. Errors & Failure States
+
+| Scenario | What happens |
+|---|---|
+| Message to a conversation you're not a member of | Rejected server-side, never trust the client's claimed room (§2.4) |
+| Message >4000 chars or empty | Rejected, inline error |
+| Rate limit exceeded (messages or uploads) | Error to sender only, others unaffected |
+| Media: wrong real format / fake extension | Rejected — `sharp` reads actual bytes, same as profile.md avatar check |
+| Media over size cap (image 5MB / video 20MB / file 10MB) | Rejected, inline error |
+| Group: <2 or >20 members, or name >50 chars | Rejected, inline error |
+| Starting a DM with someone who's set `discoverable: NOBODY`/restricted against you | Same non-committal failure as search already gives (profile.md-consistent) |
+| Socket disconnects mid-send | Client keeps the tempId bubble with a retry affordance; no silent message loss |
+
+---
+
+## 9. Future Work — Not Built Yet
+
+**Friend/Follow-gated messaging.** The whole point of designing this as "open DMs, one gate check away from friend-gated" — see the top of this doc and `profile.md` §7. When Follow ships, `startConversation` gains one check; nothing else here changes.
+
+**Block & mute.** Called out in §5 as the actual near-term priority — an open-DM/open-group-add model without it is the one real gap in this design.
+
+**Message reactions & editing.** Explicitly out of scope per README §1 — "not core to learning," easy to bolt on later (`message.editedAt`, a `reaction` table keyed on `(messageId, userId, emoji)`).
+
+**Per-person read receipts.** Deferred with unread counts (§4) — worth it once groups have enough social weight to want "seen by" ticks.
+
+**Full-text search over messages.** `ILIKE` is fine at this scale; Postgres `tsvector` + GIN is the documented upgrade (README §13.5), not needed yet.
+
+**Web Push.** README §13.6 — needs a service worker and a permission prompt; in-app notification (§6) covers a 20-user app where the tab stays open.
+
+**E2EE.** Not attempted — same honest note as README §12: messages are encrypted in transit, readable in the database, same as most non-Signal apps.
