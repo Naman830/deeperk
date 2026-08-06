@@ -53,7 +53,7 @@ flowchart TD
         SVerify -->|"3rd wrong — row burned"| SEmail
         SVerify -->|"Expired (5min) — resend"| SOtp
         SVerify -->|Correct| SDel["Row deleted, registration-token<br/>cookie issued (httpOnly, 15min)"]
-        SDel --> SName["Name"] --> SUser["Username<br/>(taken → stay, retype)"]
+        SDel --> SFName["First Name"] --> SLName["Last Name"] --> SUser["Username<br/>(taken → stay, retype)"]
         SUser --> SDob["Date of birth<br/>(under 13 → rejected)"]
         SDob --> SPass["Password"]
         SPass --> SCreate{"Account created?"}
@@ -73,7 +73,7 @@ flowchart TD
 
 **Login:** email + password, checked together. Wrong on either side gives the exact same error — *"the email doesn't exist or the password is wrong"* — so a failed attempt never confirms whether an account exists. Forgot password sends a reset code to the email (if an account exists — same non-committal response), and a successful reset revokes every other active session so a stolen password can't keep a stale session alive elsewhere.
 
-**Signup:** email first. If it's already registered, the user is told and sent to Login — this one screen is allowed to confirm existence, since the user already declared themselves "new." Otherwise a 6-digit OTP goes out (Resend), and a `PendingRegistration` row holds the hashed code — nothing is written to `User` yet. Once the code checks out, that row is deleted immediately and a short-lived, httpOnly, signed registration-token cookie takes over as proof "this browser verified this email" for the rest of signup (Name → Username → DOB → Password). The `User` row is only written at the very end, in the same transaction that creates the session — so an abandoned signup never leaves a half-built account behind.
+**Signup:** email first. If it's already registered, the user is told and sent to Login — this one screen is allowed to confirm existence, since the user already declared themselves "new." Otherwise a 6-digit OTP goes out (Resend), and a `PendingRegistration` row holds the hashed code — nothing is written to `User` yet. Once the code checks out, that row is deleted immediately and a short-lived, httpOnly, signed registration-token cookie takes over as proof "this browser verified this email" for the rest of signup (First Name → Last Name → Username → DOB → Password). The `User` row is only written at the very end, in the same transaction that creates the session — so an abandoned signup never leaves a half-built account behind.
 
 ---
 
@@ -82,7 +82,7 @@ flowchart TD
 | Table | Owner | Key fields |
 |---|---|---|
 | `pending_registration` | ours | `email` (unique), `otpHash` (sha-256), `attempts`, `expiresAt` (15 min) |
-| `user` | Better Auth + ours | `id`, `email` (unique), `emailVerified`, `name`, `username` (unique, lowercase), `displayUsername`, `birthDate` |
+| `user` | Better Auth + ours | `id`, `email` (unique), `emailVerified`, `firstName`, `lastName`, `username` (unique, lowercase), `displayUsername`, `birthDate` |
 | `account` | Better Auth | `userId`, `providerId: "credential"`, `password` (scrypt hash) |
 | `session` | Better Auth | `token` (opaque, cookie value), `userId`, `expiresAt`, `ipAddress`, `userAgent` |
 | `verification` | Better Auth | used for the forgot-password reset code |
@@ -96,7 +96,8 @@ Password never lives on `user` — it's on `account`, so a stray `SELECT user.*`
 | Field | Rule |
 |---|---|
 | **Email** | Valid format, lowercased, trimmed, unique |
-| **Name** | Single display-name field, 1–50 chars |
+| **First Name** | 1–25 chars, any Unicode, emoji fine, required |
+| **Last Name** | 0–25 chars, optional |
 | **Username** | 3–30 chars · `a-z`, `0-9`, `.`, `_` only · must start with a letter · must end with a letter or number · stored lowercase (typed case auto-converted) · no spaces, no unicode/emoji · reserved words blocked (`admin`, `root`, `support`, `api`, `system`, `login`, `signup`, etc.) · unique, case-insensitive |
 | **Date of birth** | Real date, age ≥ 13 |
 | **Password** | 10–128 chars · at least 1 uppercase, 1 lowercase, 1 number · special character optional · no spaces · hashed with `scrypt` via Better Auth |
