@@ -1,6 +1,6 @@
 # Database Connection — Neon + Drizzle Architecture
 
-Every other doc in this repo — [`auth.md`](../user/auth.md), [`profile.md`](../user/profile.md), [`chat.md`](../chat/chat.md), [`search.md`](../user/search.md), [`call.md`](../call/call.md) — assumes a single `db` object already exists and reads/writes through it. This is that object: how the app connects to Postgres, how table definitions are organized across those docs, and how a schema change gets from a JS file into the real database.
+Every other doc in this repo — [`auth.md`](../user/auth.md), [`profile.md`](../user/profile.md), [`chat.md`](../chat/chat.md), [`search.md`](../user/search.md), [`call.md`](../call/call.md) — assumes a single `db` object already exists and reads/writes through it. This is that object: how the app connects to Postgres, how table definitions are organized across those docs, and how a schema change gets from a JS file into the real database. For the actual table-by-table contents, see [`schema.md`](./schema.md).
 
 **One database, two apps.** `web/` (Next.js, TypeScript) and `server/` (Socket.IO, JavaScript) are separate processes but talk to the same Neon Postgres instance through the same schema — so `db/` lives at the project root, not inside either app.
 
@@ -76,7 +76,7 @@ webRtc_Project/
 └── server/                          ← Socket.IO — imports db/ via a relative path
 ```
 
-`db/schema/` is currently an empty folder — nothing under it is implemented yet. The layout above is the structure every domain doc already assumes (auth.md §3, profile.md §3, chat.md §4, call.md §4); this doc exists to make that assumption explicit before the first schema file is written.
+The layout above is the structure every domain doc already assumes (auth.md §3, profile.md §3, chat.md §4, call.md §4), and is now fully implemented — see [`schema.md`](./schema.md) for the full table-by-table reference (columns, FKs, indexes, enums).
 
 ---
 
