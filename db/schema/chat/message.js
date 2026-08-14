@@ -24,19 +24,15 @@ const messageTypeEnum = pgEnum("message_type_enum", [
   "CALL",
 ]);
 
-/**
- * `message` — Docs/chat/chat.md (+ the CALL type / `callId` from
- * Docs/call/call.md, where a call bubble is a `message` row carrying
- * `callId` instead of `body`; its display text is derived from
- * `call.status` at render time, never stored redundantly).
- *
- * `senderId` is NOT NULL and stays that way forever: the docs are explicit
- * that a user's row is anonymized in place, never hard-deleted, so
- * `senderId` always points at a valid (possibly anonymized) `user` row.
- * Do NOT make this column nullable to "handle" user removal — ON DELETE
- * RESTRICT is the correct guardrail instead, matching the docs' explicit
- * "messages must survive sender removal" rule.
- */
+/*
+user
+  │
+  └── senderId ──> message <── conversationId ── conversation
+
+message
+  │
+  └── callId ──> call
+*/
 const message = pgTable(
   "message",
   {
