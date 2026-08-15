@@ -26,6 +26,11 @@ const user = pgTable(
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull().default(false),
 
+    // Required by Better Auth.
+    // App uses firstName/lastName instead.
+    name: text("name").notNull(),
+    image: text("image"),
+
     firstName: text("first_name").notNull(),
     lastName: text("last_name"),
 
