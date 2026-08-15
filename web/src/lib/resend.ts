@@ -31,3 +31,23 @@ export async function sendForgotPasswordOtpEmail(email: string, otp: string) {
     text: `Your ChatSphere password reset code is ${otp}. It expires in 5 minutes. If you didn't request this, you can ignore this email — your password won't change.`,
   });
 }
+
+/** Email-change OTP (Docs/user/profile.md — Email change flow), sent to the NEW address. */
+export async function sendEmailChangeOtpEmail(newEmail: string, otp: string) {
+  await getResendClient().emails.send({
+    from: FROM,
+    to: newEmail,
+    subject: `${otp} is your ChatSphere email verification code`,
+    text: `Your ChatSphere email verification code is ${otp}. It expires in 5 minutes. If you didn't request this, you can ignore this email.`,
+  });
+}
+
+/** Notifies the OLD address after a successful email change (Docs/user/profile.md §5). Best-effort, not blocking. */
+export async function sendEmailChangedNoticeEmail(oldEmail: string, newEmail: string) {
+  await getResendClient().emails.send({
+    from: FROM,
+    to: oldEmail,
+    subject: "Your ChatSphere email address was changed",
+    text: `Your ChatSphere account's email was changed to ${newEmail}. If you didn't make this change, contact support immediately.`,
+  });
+}
