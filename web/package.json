@@ -9,11 +9,18 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "better-auth": "^1.6.28",
+    "drizzle-orm": "^0.45.2",
+    "jose": "^6.2.8",
     "next": "16.2.12",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-toastify": "^11.1.0",
+    "resend": "^6.20.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@better-auth/cli": "^1.4.21",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
