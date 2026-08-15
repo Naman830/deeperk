@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch output from `npx @better-auth/cli generate` (schema-conformance
+# checks — see CLAUDE.md's "Known risk to close out" section) — never commit
+.better-auth-schema-check.ts
