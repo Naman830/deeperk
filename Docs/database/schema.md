@@ -56,6 +56,8 @@ Owns the one table every other domain reads but never redefines: `user`. See [`d
 | id | text | NOT NULL PK | `randomUUID()` | |
 | email | text | NOT NULL | — | unique (`uq_user_email`) |
 | email_verified | boolean | NOT NULL | false | |
+| name | text | NOT NULL | — | Better Auth core field, not app-facing; computed from first/last name at signup |
+| image | text | NULL | — | Better Auth core field, unused — avatars go through `avatar_public_id` instead |
 | first_name | text | NOT NULL | — | 1–25 chars |
 | last_name | text | NULL | — | 0–25 chars |
 | username | text | NOT NULL | — | unique (`uq_user_username`), stored lowercase, 3–30 chars |
@@ -80,10 +82,14 @@ No FKs — `user` is the root of the graph. Indexes: unique on `email`, unique o
 | id | text | NOT NULL PK | |
 | user_id | text | NOT NULL | FK → `user.id`, **CASCADE** |
 | provider_id | text | NOT NULL | e.g. `"credential"` |
+| account_id | text | NOT NULL | Better Auth core field; set to the user's own id for the credential provider |
+| access_token / refresh_token / id_token | text | NULL | Better Auth core OAuth fields, unused — this app is credential-only, no OAuth providers in scope |
+| access_token_expires_at / refresh_token_expires_at | timestamptz | NULL | ditto, unused |
+| scope | text | NULL | ditto, unused |
 | password | text | NULL | scrypt hash; only set for the credential provider — deliberately kept off `user` |
 | created_at / updated_at | timestamptz | NOT NULL | |
 
-Index: `idx_account_user` on `user_id`.
+Index: `idx_account_user` on `user_id`. The OAuth-shaped columns above exist only because Better Auth's base `account` schema requires them on every row (verified against the installed `better-auth@1.6.28` package's core types, not guessed) — see `CLAUDE.md`'s "Known risk to close out" section for why this reconciliation pass happened.
 
 ### 3.3 `session` (Better Auth)
 
@@ -121,6 +127,18 @@ Ephemeral row backing the signup OTP step. No FK — the whole point is that no 
 | otp_hash | text | NOT NULL | sha-256 hex |
 | attempts | integer | NOT NULL, default 0 | row burns at 3 |
 | expires_at | timestamptz | NOT NULL | 5-minute OTP validity window |
+| created_at | timestamptz | NOT NULL | |
+
+### 3.6 `rate_limit_hit`
+
+App-level rate-limit counters for the per-email / per-IP limits in `auth.md` (login attempts, signup OTP sends, account creation, forgot-password requests) that Better Auth's own IP+path-keyed limiter can't express. No FK — bucket keys are opaque strings like `login:<email>:<ip>`.
+
+| Column | Type | Null? | Notes |
+|---|---|---|---|
+| id | text | NOT NULL PK | |
+| bucket_key | text | NOT NULL | unique (`uq_rate_limit_hit_bucket_key`) |
+| window_start | timestamptz | NOT NULL | start of the current counting window |
+| count | integer | NOT NULL, default 1 | hits within the current window |
 | created_at | timestamptz | NOT NULL | |
 
 ---
