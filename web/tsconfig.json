@@ -19,7 +19,18 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      // db/schema/**/*.js (CommonJS, per CLAUDE.md's "CommonJS everywhere in
+      // db/" convention) resolves drizzle-orm's types via its `require`
+      // export condition (index.d.cts). Our own .ts files import drizzle-orm
+      // via the `import` condition (index.d.ts) by default — a classic
+      // dual-package hazard where structurally-identical SQL/Column classes
+      // end up nominally distinct (private field branding), breaking `eq()`
+      // etc. against columns from db/schema. Forcing every resolution in
+      // this program through the same .d.cts declaration set fixes it
+      // without touching anything under db/.
+      "drizzle-orm": ["../node_modules/drizzle-orm/index.d.cts"],
+      "drizzle-orm/pg-core": ["../node_modules/drizzle-orm/pg-core/index.d.cts"]
     }
   },
   "include": [
