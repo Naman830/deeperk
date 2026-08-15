@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { requestPasswordResetOtp, resetPasswordWithOtp } from "@/lib/auth-client";
 import { AuthFormField } from "@/components/auth-form-field";
-import { emailSchema, otpSchema, passwordSchema } from "@/lib/validation/signup";
+import { emailSchema, otpSchema, passwordSchema, passwordRequirements, getPasswordSubmitError } from "@/lib/validation/signup";
 
 type Step = "email" | "reset";
 
@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
     }
     const passwordParsed = passwordSchema.safeParse(password);
     if (!passwordParsed.success) {
-      setError(passwordParsed.error.issues[0]?.message);
+      setError(getPasswordSubmitError(password));
       return;
     }
 
@@ -104,7 +104,7 @@ export default function ForgotPasswordPage() {
         </form>
       ) : (
         <form onSubmit={handleReset} className="flex flex-col gap-4">
-          <AuthFormField label="Reset code" name="otp" value={otp} onChange={setOtp} autoFocus />
+          <AuthFormField label={`Code sent to ${email}`} name="otp" value={otp} onChange={setOtp} autoFocus />
           <AuthFormField
             label="New password"
             name="password"
@@ -112,6 +112,8 @@ export default function ForgotPasswordPage() {
             value={password}
             onChange={setPassword}
             autoComplete="new-password"
+            showPasswordToggle
+            requirements={{ rules: passwordRequirements }}
           />
           {error && <p className="text-sm text-red-500">{error}</p>}
           <button

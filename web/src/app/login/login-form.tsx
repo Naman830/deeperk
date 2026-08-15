@@ -76,6 +76,7 @@ export function LoginForm() {
           value={password}
           onChange={setPassword}
           autoComplete="current-password"
+          showPasswordToggle
         />
         {error && <p className="text-sm text-red-500">{error}</p>}
         <button
