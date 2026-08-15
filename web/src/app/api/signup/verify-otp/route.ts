@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { eq } from "drizzle-orm";
+import { eq } from "@/lib/drizzle-ops";
 import { db } from "@/lib/db";
 import { pendingRegistration } from "../../../../../../db/schema";
 import { emailSchema, otpSchema } from "@/lib/validation/signup";

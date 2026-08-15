@@ -1,6 +1,6 @@
 import { randomInt, createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq } from "@/lib/drizzle-ops";
 import { getIp } from "better-auth/api";
 import { db } from "@/lib/db";
 import { user, pendingRegistration } from "../../../../../../db/schema";

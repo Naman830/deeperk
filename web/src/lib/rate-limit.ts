@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql } from "./drizzle-ops";
 import { db } from "./db";
 import { rateLimitHit } from "../../../db/schema";
 
