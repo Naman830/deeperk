@@ -26,10 +26,22 @@ Tick a task off below when it's done, and update `CLAUDE.md` with any decision m
 ### 2. API (REST + Socket.IO)
 
 - [x] Auth (signup OTP flow, login, forgot-password — Better Auth)
-- [ ] Profile
+- [ ] Profile — see "Profile — remaining work" below
 - [ ] Search
 - [ ] Chat (REST + Socket.IO)
 - [ ] Call signaling (Socket.IO, `server/`)
+
+### Profile — remaining work
+
+Tracking section for the Profile API build-out (removed once everything below is checked off and the "Profile" line above is ticked instead).
+
+- [x] Core profile fields (`GET`/`PATCH /api/me`) + social links
+- [x] Privacy settings (`GET`/`PATCH /api/me/privacy`)
+- [x] Public profile view (`GET /api/users/[username]`)
+- [x] Username change (`PATCH /api/me/username`, 30-day cooldown) — old-handle 30-day reservation not implemented, no schema for it yet
+- [x] Email change flow (`POST /api/me/email/start`, `POST /api/me/email/verify`)
+- [x] Delete-account flow (`POST /api/me/delete`, 30-day grace, cancels on next login)
+- [ ] Avatar upload — blocked on Cloudinary credentials
 
 ### 3. Frontend
 
