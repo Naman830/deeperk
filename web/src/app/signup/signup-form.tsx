@@ -1,24 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { isUsernameAvailable } from "@/lib/auth-client";
 import { AuthFormField } from "@/components/auth-form-field";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import {
   emailSchema,
   otpSchema,
   firstNameSchema,
   lastNameSchema,
   usernameSchema,
+  toCanonicalUsername,
+  getUsernameSubmitError,
   birthDateSchema,
   passwordSchema,
+  passwordRequirements,
+  getPasswordSubmitError,
 } from "@/lib/validation/signup";
+import { usernameRequirements } from "@/lib/validation/username";
 
 type Step = "email" | "otp" | "firstName" | "lastName" | "username" | "birthDate" | "password";
 
 const STEP_ORDER: Step[] = ["email", "otp", "firstName", "lastName", "username", "birthDate", "password"];
+
+type UsernameCheckStatus = "idle" | "checking" | "available" | "taken" | "error";
 
 async function postJson(url: string, body: unknown) {
   const res = await fetch(url, {
@@ -28,6 +36,14 @@ async function postJson(url: string, body: unknown) {
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="text-muted self-start text-sm hover:text-foreground">
+      ← Back
+    </button>
+  );
 }
 
 export function SignupForm() {
@@ -44,11 +60,62 @@ export function SignupForm() {
   const [birthDate, setBirthDate] = useState("");
   const [password, setPassword] = useState("");
 
+  // True once the current email's OTP has been verified — reset whenever a
+  // fresh code goes out, so re-visiting `otp` after editing `email` is
+  // structurally forced (STEP_ORDER only ever moves one step at a time).
+  const [otpVerified, setOtpVerified] = useState(false);
+
+  // Only the outcome of the last-resolved check is kept in state; "checking"
+  // itself is derived (no cached result yet for the current value) rather
+  // than setState'd, so the effect below never setStates outside a callback.
+  const [usernameCheckedValue, setUsernameCheckedValue] = useState("");
+  const [usernameCheckResult, setUsernameCheckResult] = useState<"available" | "taken" | "error" | null>(null);
+  const debouncedUsername = useDebouncedValue(username, 400);
+
+  const stepIndex = STEP_ORDER.indexOf(step);
+
   function goNext() {
-    const i = STEP_ORDER.indexOf(step);
     setError(undefined);
-    setStep(STEP_ORDER[i + 1]);
+    setStep(STEP_ORDER[stepIndex + 1]);
   }
+
+  function goBack() {
+    setError(undefined);
+    const prevStep = STEP_ORDER[stepIndex - 1];
+    // A code sent for the email you're about to edit shouldn't linger.
+    if (step === "otp" && prevStep === "email") setOtp("");
+    setStep(prevStep);
+  }
+
+  const usernameShapeValid = usernameSchema.safeParse(debouncedUsername).success;
+  const hasCachedResult = usernameShapeValid && usernameCheckedValue === toCanonicalUsername(debouncedUsername);
+  const displayedUsernameStatus: UsernameCheckStatus = !usernameShapeValid
+    ? "idle"
+    : hasCachedResult
+      ? (usernameCheckResult ?? "checking")
+      : "checking";
+
+  // Live username availability — fires ~400ms after typing settles, guarded
+  // against out-of-order responses from fast typers via the `ignore` flag.
+  useEffect(() => {
+    const parsed = usernameSchema.safeParse(debouncedUsername);
+    if (!parsed.success) return;
+    let ignore = false;
+    isUsernameAvailable({ username: parsed.data })
+      .then(({ data }) => {
+        if (ignore) return;
+        setUsernameCheckedValue(toCanonicalUsername(parsed.data));
+        setUsernameCheckResult(data?.available ? "available" : "taken");
+      })
+      .catch(() => {
+        if (ignore) return;
+        setUsernameCheckedValue(toCanonicalUsername(parsed.data));
+        setUsernameCheckResult("error");
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [debouncedUsername]);
 
   async function handleEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,8 +144,9 @@ export function SignupForm() {
       setError(sent.data.error ?? "Couldn't send the code. Please try again.");
       return;
     }
+    toast.info(otpVerified ? "We sent a new code to your email." : "We sent a 6-digit code to your email.");
+    setOtpVerified(false);
     setEmail(parsed.data);
-    toast.info("We sent a 6-digit code to your email.");
     goNext();
   }
 
@@ -108,6 +176,7 @@ export function SignupForm() {
       setError(verify.data.error ?? "Incorrect code.");
       return;
     }
+    setOtpVerified(true);
     goNext();
   }
 
@@ -138,7 +207,16 @@ export function SignupForm() {
     setError(undefined);
     const parsed = usernameSchema.safeParse(username);
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message);
+      setError(getUsernameSubmitError(username));
+      return;
+    }
+    // Skip the redundant network call if the live check already confirmed
+    // this exact value is available.
+    const alreadyConfirmed =
+      usernameCheckResult === "available" && usernameCheckedValue === toCanonicalUsername(parsed.data);
+    if (alreadyConfirmed) {
+      setUsername(parsed.data);
+      goNext();
       return;
     }
     setSubmitting(true);
@@ -168,7 +246,7 @@ export function SignupForm() {
     setError(undefined);
     const parsed = passwordSchema.safeParse(password);
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message);
+      setError(getPasswordSubmitError(password));
       return;
     }
     setSubmitting(true);
@@ -192,7 +270,13 @@ export function SignupForm() {
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 px-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>
-        <p className="text-muted text-sm">Step {STEP_ORDER.indexOf(step) + 1} of {STEP_ORDER.length}</p>
+        <p className="text-muted text-sm">Step {stepIndex + 1} of {STEP_ORDER.length}</p>
+        <div className="bg-border mt-2 h-1 w-full overflow-hidden rounded-full">
+          <div
+            className="h-full rounded-full bg-foreground transition-all"
+            style={{ width: `${((stepIndex + 1) / STEP_ORDER.length) * 100}%` }}
+          />
+        </div>
       </div>
 
       {step === "email" && (
@@ -215,6 +299,7 @@ export function SignupForm() {
           <button type="button" onClick={handleResendOtp} className="text-muted text-sm hover:text-foreground">
             Resend code
           </button>
+          <BackButton onClick={goBack} />
         </form>
       )}
 
@@ -225,6 +310,7 @@ export function SignupForm() {
           <button type="submit" className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background">
             Continue
           </button>
+          <BackButton onClick={goBack} />
         </form>
       )}
 
@@ -235,16 +321,32 @@ export function SignupForm() {
           <button type="submit" className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background">
             Continue
           </button>
+          <BackButton onClick={goBack} />
         </form>
       )}
 
       {step === "username" && (
         <form onSubmit={handleUsernameSubmit} className="flex flex-col gap-4">
-          <AuthFormField label="Username" name="username" value={username} onChange={setUsername} autoFocus />
+          <AuthFormField
+            label="Username"
+            name="username"
+            value={username}
+            onChange={setUsername}
+            autoFocus
+            requirements={{ rules: usernameRequirements }}
+          />
+          {displayedUsernameStatus === "checking" && <p className="text-muted text-sm">Checking availability…</p>}
+          {displayedUsernameStatus === "available" && <p className="text-sm text-green-500">✓ Available</p>}
+          {displayedUsernameStatus === "taken" && <p className="text-sm text-red-500">✗ Already taken</p>}
           {error && <p className="text-sm text-red-500">{error}</p>}
-          <button type="submit" disabled={submitting} className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={submitting || displayedUsernameStatus === "checking"}
+            className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+          >
             {submitting ? "Checking…" : "Continue"}
           </button>
+          <BackButton onClick={goBack} />
         </form>
       )}
 
@@ -255,16 +357,28 @@ export function SignupForm() {
           <button type="submit" className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background">
             Continue
           </button>
+          <BackButton onClick={goBack} />
         </form>
       )}
 
       {step === "password" && (
         <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
-          <AuthFormField label="Password" name="password" type="password" value={password} onChange={setPassword} autoFocus autoComplete="new-password" />
+          <AuthFormField
+            label="Password"
+            name="password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            autoFocus
+            autoComplete="new-password"
+            showPasswordToggle
+            requirements={{ rules: passwordRequirements }}
+          />
           {error && <p className="text-sm text-red-500">{error}</p>}
           <button type="submit" disabled={submitting} className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50">
             {submitting ? "Creating account…" : "Create account"}
           </button>
+          <BackButton onClick={goBack} />
         </form>
       )}
 
