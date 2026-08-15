@@ -16,11 +16,26 @@ const account = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }), // onDelete: "cascade" means if the user is permanently removed, the account row is automatically removed too
 
+    // Login method. "credential" = email + password.
     providerId: text("provider_id").notNull(),
-    // providerId simply tells Better Auth which login method this account uses.
-    // "credential" means: This user logs in using email + password.
 
-    password: text("password"), // Hashed Password.
+    // Required by Better Auth.
+    accountId: text("account_id").notNull(),
+
+    // Better Auth fields; unused because we only use credentials.
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      withTimezone: true,
+    }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+      withTimezone: true,
+    }),
+    scope: text("scope"),
+
+    // Hashed password.
+    password: text("password"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
