@@ -38,3 +38,14 @@ export function isReservedUsername(username: string): boolean {
 export function isUsernameAllowed(username: string): boolean {
   return isValidUsernameShape(username) && !isReservedUsername(username);
 }
+
+// Single source of truth for the live requirements checklist shown under the
+// signup username field — each rule is one piece of USERNAME_PATTERN, so the
+// checklist and the actual shape check can't drift apart. Reserved-word
+// rejection isn't included here (it behaves like "taken", not a shape rule).
+export const usernameRequirements = [
+  { label: "3–30 characters", test: (v: string) => v.trim().length >= 3 && v.trim().length <= 30 },
+  { label: "Starts with a letter", test: (v: string) => /^[a-zA-Z]/.test(v.trim()) },
+  { label: "Only letters, numbers, '.' or '_'", test: (v: string) => /^[a-zA-Z0-9._]*$/.test(v.trim()) },
+  { label: "Ends with a letter or number", test: (v: string) => /[a-zA-Z0-9]$/.test(v.trim()) },
+];
