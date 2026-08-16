@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { MessageCircle, Phone, Settings, LogOut, UserRound } from "lucide-react";
 import { signOut } from "@/lib/auth/client";
-import { UserAvatar } from "@/components/app/user-avatar";
+import { UserAvatar } from "@/components/features/profile/user-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,

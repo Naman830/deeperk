@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getOwnProfile } from "@/lib/profile/own-profile";
-import { AppRail } from "@/components/app/app-rail";
+import { AppRail } from "./app-rail";
 
 // Every authenticated screen lives under this layout. getSession() also clears a
 // pending deletionScheduledAt, so simply reaching the app cancels a deletion.

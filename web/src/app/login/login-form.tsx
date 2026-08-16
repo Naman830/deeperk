@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { signIn } from "@/lib/auth/client";
-import { AuthFormField } from "@/components/auth-form-field";
+import { AuthFormField } from "@/components/features/auth/auth-form-field";
 import { loginSchema } from "@/lib/validation/login";
 
 // Docs/user/auth.md §2 "Login" — any failure (wrong email OR wrong password)

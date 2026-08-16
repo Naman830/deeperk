@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SearchX } from "lucide-react";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import { UserAvatar } from "@/components/app/user-avatar";
-import { EmptyState } from "@/components/app/empty-state";
+import { UserAvatar } from "@/components/features/profile/user-avatar";
+import { EmptyState } from "@/components/features/shell/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export type SearchResult = {

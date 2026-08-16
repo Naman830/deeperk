@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Monitor, Moon, Sun } from "lucide-react";
-import { useTheme, type ThemePreference } from "@/components/theme-provider";
+import { useTheme, type ThemePreference } from "@/components/features/shell/theme-provider";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 

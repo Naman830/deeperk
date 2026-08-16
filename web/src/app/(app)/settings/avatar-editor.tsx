@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Cropper, { type Area } from "react-easy-crop";
 import { toast } from "react-toastify";
 import { Trash2, Upload } from "lucide-react";
-import { UserAvatar } from "@/components/app/user-avatar";
+import { UserAvatar } from "@/components/features/profile/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiDelete, apiUpload, GENERIC_ERROR } from "@/lib/api-client";

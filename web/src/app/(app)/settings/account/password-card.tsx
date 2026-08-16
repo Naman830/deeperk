@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { authClient } from "@/lib/auth/client";
-import { AuthFormField } from "@/components/auth-form-field";
+import { AuthFormField } from "@/components/features/auth/auth-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPasswordSubmitError, passwordRequirements } from "@/lib/validation/signup";

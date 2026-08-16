@@ -1,6 +1,6 @@
 import { UserX } from "lucide-react";
-import { MainPane } from "@/components/app/list-column";
-import { EmptyState } from "@/components/app/empty-state";
+import { MainPane } from "@/components/features/shell/main-pane";
+import { EmptyState } from "@/components/features/shell/empty-state";
 
 // One page for "no such user", "deactivated" and "scheduled for deletion" — the
 // query can't distinguish them and neither should the UI.

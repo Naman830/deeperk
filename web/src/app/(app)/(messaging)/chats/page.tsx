@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { MessagesSquare } from "lucide-react";
-import { MainPane } from "@/components/app/list-column";
-import { EmptyState } from "@/components/app/empty-state";
+import { MainPane } from "@/components/features/shell/main-pane";
+import { EmptyState } from "@/components/features/shell/empty-state";
 
 export const metadata: Metadata = { title: "Chats" };
 

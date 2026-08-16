@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { isUsernameAvailable } from "@/lib/auth/client";
-import { AuthFormField } from "@/components/auth-form-field";
+import { AuthFormField } from "@/components/features/auth/auth-form-field";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
   emailSchema,

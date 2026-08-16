@@ -23,21 +23,3 @@ export function ListColumn({ title, action, toolbar, className, children }: List
     </div>
   );
 }
-
-// The right-hand pane. `centered` is for the placeholder states that sit where a
-// conversation or profile will eventually render.
-export function MainPane({
-  className,
-  centered,
-  children,
-}: {
-  className?: string;
-  centered?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <main className={cn("bg-background h-full w-full min-w-0", centered ? "grid place-items-center" : "flex flex-col", className)}>
-      {children}
-    </main>
-  );
-}

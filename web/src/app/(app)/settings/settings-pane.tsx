@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { MainPane } from "@/components/app/list-column";
+import { MainPane } from "@/components/features/shell/main-pane";
 import { Button } from "@/components/ui/button";
 
 // Shared frame for every Settings section: a header (with a mobile-only back

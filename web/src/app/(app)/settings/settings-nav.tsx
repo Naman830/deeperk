@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Palette, Shield, UserRound, Wrench } from "lucide-react";
-import { ListColumn } from "@/components/app/list-column";
+import { ListColumn } from "@/components/features/shell/list-column";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { MessagesSquare, Search } from "lucide-react";
-import { ListColumn } from "./list-column";
-import { UserSearchResults, MIN_SEARCH_LENGTH } from "./user-search-results";
-import { EmptyState } from "./empty-state";
-import { Input } from "@/components/ui/input";
+import { MessagesSquare } from "lucide-react";
+import { ListColumn } from "@/components/features/shell/list-column";
+import { UserSearchResults, MIN_SEARCH_LENGTH } from "@/components/features/search/user-search-results";
+import { UserSearchInput } from "@/components/features/search/user-search-input";
+import { EmptyState } from "@/components/features/shell/empty-state";
 
 // The sketch's middle column: a search field above the conversation list. Typing
 // 2+ characters swaps the list for people search (Docs/user/search.md), so
@@ -17,19 +17,7 @@ export function ConversationColumn() {
   return (
     <ListColumn
       title="Chats"
-      toolbar={
-        <div className="relative">
-          <Search size={15} className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2" />
-          <Input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search people by username"
-            aria-label="Search people by username"
-            className="h-9 pl-8"
-          />
-        </div>
-      }
+      toolbar={<UserSearchInput value={query} onChange={setQuery} />}
     >
       {searching ? (
         <UserSearchResults query={query} />

@@ -1,7 +1,7 @@
 import { PhoneOff } from "lucide-react";
-import { ListColumn } from "@/components/app/list-column";
-import { ShellColumns } from "@/components/app/shell-columns";
-import { EmptyState } from "@/components/app/empty-state";
+import { ListColumn } from "@/components/features/shell/list-column";
+import { ShellColumns } from "@/components/features/shell/shell-columns";
+import { EmptyState } from "@/components/features/shell/empty-state";
 
 export default function CallsLayout({ children }: LayoutProps<"/calls">) {
   return (

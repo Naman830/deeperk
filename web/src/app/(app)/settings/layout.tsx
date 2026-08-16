@@ -1,5 +1,5 @@
 import { SettingsNav } from "./settings-nav";
-import { ShellColumns } from "@/components/app/shell-columns";
+import { ShellColumns } from "@/components/features/shell/shell-columns";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   return (
