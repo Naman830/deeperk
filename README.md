@@ -43,5 +43,13 @@ Not part of any API surface — both need a scheduler, and none is chosen yet. N
 - [x] Auth (login, signup, forgot-password pages)
 - [x] Profile (app shell, `/settings/*`, `/u/[username]`)
 - [x] Search (in the chats column + standalone `/search`)
+- [x] UX pass (collapsible rail persisted across reloads, mobile fixes, loading/error/404 boundaries, one error channel)
 - [ ] Chat
 - [ ] Call
+
+### 4. Verify
+
+- [x] Auth / Profile / Search verified end-to-end against the real Neon DB and a running `next dev` (66 API checks + 21 page-render checks). See CLAUDE.md → "End-to-end verification pass".
+- [ ] **Cloudinary API key can't upload.** Credentials are set and `ping()` works, but the key is restricted: uploads 403 with `missing permissions (actions=["create"])`. Grant `create`+`read`, or use an unrestricted key. Avatar upload is the only feature blocked; all of its validation is verified.
+- [ ] **Set `TRUSTED_PROXIES`** before deploying, or every IP-keyed rate limit is bypassable via a client-supplied `x-forwarded-for`.
+- [ ] Chat / Call verification (once built)
