@@ -2,14 +2,14 @@ import { randomInt, createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { APIError } from "better-auth/api";
-import { eq, and } from "@/lib/drizzle-ops";
+import { eq, and } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { user, pendingContactChange } from "../../../../../../../db/schema";
-import { auth } from "@/lib/auth";
-import { getSession } from "@/lib/get-session";
+import { auth } from "@/lib/auth/server";
+import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { emailSchema } from "@/lib/validation/signup";
-import { sendEmailChangeOtpEmail } from "@/lib/resend";
+import { sendEmailChangeOtpEmail } from "@/lib/integrations/resend";
 
 const OTP_TTL_SECONDS = 5 * 60;
 const CONFIRM_PASSWORD_LIMIT = { windowSeconds: 15 * 60, max: 5 }; // 5/15min/user, shared "confirm-password gate"

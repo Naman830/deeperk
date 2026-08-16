@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { APIError } from "better-auth/api";
-import { eq } from "@/lib/drizzle-ops";
+import { eq } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { user } from "../../../../../../db/schema";
-import { auth } from "@/lib/auth";
-import { getSession } from "@/lib/get-session";
+import { auth } from "@/lib/auth/server";
+import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const CONFIRM_PASSWORD_LIMIT = { windowSeconds: 15 * 60, max: 5 }; // 5/15min/user, shared "confirm-password gate"
@@ -17,7 +17,7 @@ const DELETION_GRACE_DAYS = 30;
 // NOT call Better Auth's own /delete-user — that hard-deletes the row, which
 // CLAUDE.md's "never hard-delete a user" rule forbids; this only stamps
 // deletionScheduledAt. Logging back in during the window cancels it (see
-// web/src/lib/get-session.ts). No session revocation here, per the doc.
+// web/src/lib/auth/session.ts). No session revocation here, per the doc.
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

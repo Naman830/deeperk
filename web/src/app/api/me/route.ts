@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { eq } from "@/lib/drizzle-ops";
+import { eq } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { user, socialLink, privacySettings } from "../../../../../db/schema";
-import { getSession } from "@/lib/get-session";
+import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { updateProfileSchema } from "@/lib/validation/profile";
+import { avatarUrl } from "@/lib/avatar-url";
 
 // Owner's own Settings-page bundle: profile fields + social links + privacy
 // settings in one round trip (Docs/user/profile.md — public view is a
@@ -38,6 +39,7 @@ export async function GET() {
 
   return NextResponse.json({
     ...profile[0],
+    avatarUrl: avatarUrl(profile[0]?.avatarPublicId),
     socialLinks: links,
     privacy: privacy[0] ?? { discoverable: "EVERYONE", onlineStatus: "EVERYONE", profileDetails: "EVERYONE" },
   });

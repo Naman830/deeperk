@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { eq } from "@/lib/drizzle-ops";
+import { eq } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { privacySettings } from "../../../../../../db/schema";
-import { getSession } from "@/lib/get-session";
+import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { updatePrivacySchema } from "@/lib/validation/profile";
 
