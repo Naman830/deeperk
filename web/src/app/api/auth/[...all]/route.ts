@@ -1,5 +1,5 @@
 import { toNextJsHandler } from "better-auth/next-js";
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/server";
 
 // Catch-all for every Better Auth-owned endpoint: session validation/refresh,
 // sign-in/sign-out, the emailOTP plugin's forget-password endpoints, and the
