@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/get-session";
+import { getSession } from "@/lib/auth/session";
 import { SignupForm } from "./signup-form";
 
 export default async function SignupPage() {

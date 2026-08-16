@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import { isUsernameAvailable } from "@/lib/auth-client";
+import { isUsernameAvailable } from "@/lib/auth/client";
 import { AuthFormField } from "@/components/auth-form-field";
-import { useDebouncedValue } from "@/lib/use-debounced-value";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
   emailSchema,
   otpSchema,
