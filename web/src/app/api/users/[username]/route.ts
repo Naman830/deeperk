@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { and, eq, isNull } from "@/lib/drizzle-ops";
+import { and, eq, isNull } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { user, socialLink, privacySettings } from "../../../../../../db/schema";
-import { getSession } from "@/lib/get-session";
+import { getSession } from "@/lib/auth/session";
+import { avatarUrl } from "@/lib/avatar-url";
 
 // Public profile view (Docs/user/profile.md — separate, more restricted
 // query from GET /api/me, so private fields can't leak by construction).
@@ -49,6 +50,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ use
     firstName: row.firstName,
     lastName: row.lastName,
     avatarPublicId: row.avatarPublicId,
+    avatarUrl: avatarUrl(row.avatarPublicId),
   };
 
   if (showDetails) {
