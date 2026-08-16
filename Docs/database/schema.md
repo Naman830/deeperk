@@ -2,7 +2,7 @@
 
 This is the implemented schema behind every other doc in this repo — [`auth.md`](../user/auth.md), [`profile.md`](../user/profile.md), [`search.md`](../user/search.md), [`chat.md`](../chat/chat.md), [`call.md`](../call/call.md) — built exactly to the folder layout and connection architecture described in [`db-connection.md`](./db-connection.md). Read that doc first for *how* the schema is wired up (barrels, Drizzle Kit, the shared `db` object); this doc is *what* it actually contains.
 
-13 tables, 6 domain enums, across 4 domain folders. Every design decision below that wasn't explicit in the domain docs was confirmed with the project owner before implementation — see [`../../CLAUDE.md`](../../CLAUDE.md) for the full decision log.
+15 tables, 6 domain enums, across 4 domain folders. Every design decision below that wasn't explicit in the domain docs was confirmed with the project owner before implementation — see [`../../CLAUDE.md`](../../CLAUDE.md) for the full decision log.
 
 ---
 
@@ -15,6 +15,7 @@ erDiagram
     USER ||--o| PRIVACY_SETTINGS : "configures"
     USER ||--o{ SOCIAL_LINK : "lists"
     USER ||--o{ PENDING_CONTACT_CHANGE : "requests"
+    USER ||--o{ RESERVED_USERNAME : "released"
     USER ||--o{ CONVERSATION : "creates"
     USER ||--o{ CONVERSATION_MEMBER : "is a member via"
     USER ||--o{ MESSAGE : "sends"
@@ -40,7 +41,7 @@ erDiagram
 | **Columns** | snake_case in Postgres, camelCase in Drizzle/JS, always passed as an explicit first-arg string (never relying on Drizzle's name inference) |
 | **Enums** | Postgres type names are `snake_case`, suffixed `_enum`; values are `SCREAMING_SNAKE_CASE` |
 | **Constraint/index names** | Explicit, not Drizzle's auto-generated defaults — `uq_<table>_<column(s)>` for unique constraints, `idx_<table>_<column(s)>` for indexes |
-| **Foreign keys pointing at `user`** | `RESTRICT` on every historical/business-record table (`conversation.createdById`, `conversation_member.userId`, `message.senderId`, `call.startedById`, `call_participant.userId`) — `user` rows are anonymized in place on deletion, never hard-deleted, so this is a guardrail, not an expected code path. `CASCADE` on purely ephemeral/decorative companion rows (`account`, `session`, `social_link`, `privacy_settings`, `pending_contact_change`) that have no independent meaning without their user. |
+| **Foreign keys pointing at `user`** | `RESTRICT` on every historical/business-record table (`conversation.createdById`, `conversation_member.userId`, `message.senderId`, `call.startedById`, `call_participant.userId`) — `user` rows are anonymized in place on deletion, never hard-deleted, so this is a guardrail, not an expected code path. `CASCADE` on purely ephemeral/decorative companion rows (`account`, `session`, `social_link`, `privacy_settings`, `pending_contact_change`, `reserved_username`) that have no independent meaning without their user. |
 | **User deletion model** | Soft-scheduled (`user.deletionScheduledAt`), reversible by login within 30 days; a nightly job anonymizes the row in place afterward. Message/call history therefore always resolves to a valid `user` row, even long after "deletion." |
 
 ---
@@ -140,6 +141,22 @@ App-level rate-limit counters for the per-email / per-IP limits in `auth.md` (lo
 | window_start | timestamptz | NOT NULL | start of the current counting window |
 | count | integer | NOT NULL, default 1 | hits within the current window |
 | created_at | timestamptz | NOT NULL | |
+
+### 3.7 `reserved_username`
+
+A handle someone changed away from, parked for 30 days before anyone else can take it (`profile.md` §4). The rule lives in the profile doc, but the table sits in `auth/` because it guards the global username namespace `auth/` owns — signup and the availability endpoint both read it, and only one profile route writes it.
+
+Read by the `hooks.before` username-hold branch in `web/src/lib/auth/server.ts` (covering `/sign-up/email`, `/update-user`, and `/is-username-available`); written by `PATCH /api/me/username` via `web/src/lib/auth/username-reservation.ts`.
+
+| Column | Type | Null? | Notes |
+|---|---|---|---|
+| id | text | NOT NULL PK | |
+| username | text | NOT NULL | canonical lowercase; unique (`uq_reserved_username_username`) |
+| user_id | text | NOT NULL | → `user.id` **CASCADE**; the previous owner, who is exempt from their own hold |
+| expires_at | timestamptz | NOT NULL | change time + 30 days, derived from the same `Date` that stamps `user.username_changed_at` |
+| created_at | timestamptz | NOT NULL | |
+
+Indexed on `user_id` (`idx_reserved_username_user`). Expired rows are **not** deleted — reads filter on `expires_at`, and the next release of the same handle overwrites the row via `onConflictDoUpdate`. The unique index therefore spans expired rows too, which is why the write is an upsert rather than an insert.
 
 ---
 
@@ -309,4 +326,6 @@ npx drizzle-kit push      # diffs db/schema/index.js against live Neon tables, a
 npx drizzle-kit studio    # browser GUI to inspect the result
 ```
 
-The schema was validated with `npx drizzle-kit generate` against a scratch config before this doc was written, confirming 13 tables, all expected FKs (with the ON DELETE behavior listed above), and all expected indexes compile to valid SQL. It has not yet been pushed to the project's real Neon database — run `drizzle-kit push` (§6 of `db-connection.md`) when ready to materialize it.
+The schema has been pushed to the project's real Neon database — all 15 tables are live and confirmed present (columns, indexes, and `ON DELETE` rules verified directly against `information_schema` after the push). Each change is still validated with `npx drizzle-kit generate` against a **scratch** config before it goes near the real `DATABASE_URL`; that's the house pre-push check.
+
+`drizzle-kit push`'s progress spinner can sit for 60–90s with no output on this driver/host before finishing — that's normal, not a hang.
