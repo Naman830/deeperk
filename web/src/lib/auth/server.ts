@@ -1,67 +1,53 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { username, emailOTP } from "better-auth/plugins";
-import { createAuthMiddleware, APIError, getIp } from "better-auth/api";
-import { db } from "./db";
-import * as schema from "../../../db/schema";
-import { sendForgotPasswordOtpEmail } from "./resend";
-import { checkRateLimit } from "./rate-limit";
-import { isUsernameAllowed } from "./validation/username";
+import { createAuthMiddleware, APIError, getIp, getSessionFromCtx } from "better-auth/api";
+import { db } from "../db";
+import { eq } from "../db/drizzle-ops";
+import * as schema from "../../../../db/schema";
+import { user as userTable } from "../../../../db/schema";
+import { sendForgotPasswordOtpEmail } from "../integrations/resend";
+import { checkRateLimit } from "../rate-limit";
+import { isUsernameAllowed } from "../validation/username";
+import { toCanonicalUsername } from "../validation/signup";
+import { getUsernameHolder, USERNAME_HOLD_DAYS } from "./username-reservation";
 
-// Docs/user/auth.md §6 rate limits that live on Better Auth's own paths.
-// (Signup's email/OTP/account-creation limits are on OUR custom
-// /api/signup/* routes — decision #1 — and are checked there directly,
-// not here.)
+// Rate limits for Better Auth routes.
 const LOGIN_RATE_LIMIT = { windowSeconds: 15 * 60, max: 10 }; // 10 / 15min per email+IP
 const FORGOT_PASSWORD_RATE_LIMIT = { windowSeconds: 60 * 60, max: 3 }; // 3 / hour per email
 
+// Routes that can receive a username.
+const USERNAME_HOLD_PATHS = ["/sign-up/email", "/update-user", "/is-username-available"];
+const COOLDOWN_MS = USERNAME_HOLD_DAYS * 24 * 60 * 60 * 1000;
+
 export const auth = betterAuth({
+    // Database
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
-    usePlural: false, // our tables are singular: user, account, session, verification
-    // Neon's neon-http driver (db/index.js) has NO transaction support at all
-    // ("No transactions support in neon-http driver" — verified against the
-    // installed drizzle-orm build). Leaving this false (the default) is not
-    // a missed optimization, it's the only option this driver allows.
+    usePlural: false, 
     transaction: false,
   }),
 
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
 
+  // Password login/reset.
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 10,
     maxPasswordLength: 128,
-    // "A successful reset revokes all other active sessions" (auth.md §2) —
-    // this single flag is honored by both the base /reset-password flow AND
-    // the emailOTP plugin's /email-otp/reset-password handler (verified
-    // directly against the installed plugin's source).
     revokeSessionsOnPasswordReset: true,
-    // Composition rules beyond length (upper/lower/number, no spaces) aren't
-    // expressible here — enforced by the shared zod password schema
-    // (web/src/lib/validation/password.ts) both client-side and again on our
-    // /api/signup/complete route before signUpEmail is ever called.
   },
-
+  // Extra fields stored on user.
   user: {
     additionalFields: {
-      // Not user-facing at signup: computed server-side from firstName/lastName.
       firstName: { type: "string", required: true, input: true },
       lastName: { type: "string", required: false, input: true },
       birthDate: {
         type: "date",
         required: true,
         input: true,
-        // Better Auth's "date" field type is always a JS Date internally
-        // (the CLI generator maps it to a `timestamp` column, confirmed by
-        // running `@better-auth/cli generate` against this config). Our
-        // `birth_date` column is intentionally a date-only Postgres `date`
-        // column, not `timestamp` (CLAUDE.md: "birthDate is date, no
-        // time-of-day meaning") — Drizzle's `date()` column, unconfigured,
-        // reads/writes it as a "YYYY-MM-DD" *string*, not a Date object.
-        // This transform bridges that gap on the way in.
         transform: {
           input: (value) => (value instanceof Date ? value.toISOString().slice(0, 10) : value),
         },
@@ -127,6 +113,61 @@ export const auth = betterAuth({
           throw new APIError("TOO_MANY_REQUESTS", {
             message: "Too many login attempts. Please try again later.",
           });
+        }
+      }
+
+      // Docs/user/profile.md §4: a changed-away handle is held 30 days.
+      // Checked here rather than in the `username` plugin's usernameValidator
+      // because that receives only a bare string — no session, so no way to
+      // exempt the handle's own former owner.
+      if (USERNAME_HOLD_PATHS.includes(ctx.path)) {
+        const raw =
+          typeof ctx.body?.username === "string"
+            ? ctx.body.username
+            : typeof ctx.body?.displayUsername === "string"
+              ? ctx.body.displayUsername
+              : null;
+        const candidate = raw ? toCanonicalUsername(raw) : null;
+
+        // Shape-invalid input never reaches the DB — junk costs zero queries.
+        if (candidate && isUsernameAllowed(candidate)) {
+          const holderId = await getUsernameHolder(candidate);
+          if (holderId) {
+            // Only pay for a session read when a hold was actually hit.
+            const heldSession = await getSessionFromCtx(ctx).catch(() => null);
+            if (heldSession?.user?.id !== holderId) {
+              throw new APIError(
+                ctx.path === "/is-username-available" ? "UNPROCESSABLE_ENTITY" : "BAD_REQUEST",
+                { message: "That username isn't available" },
+              );
+            }
+          }
+        }
+
+        // Better Auth's own /update-user accepts { username } straight from any
+        // logged-in client, bypassing /api/me/username's cooldown and its
+        // usernameChangedAt stamp. Enforce the same 30-day rule here so there's
+        // one effective limit. Idempotent with that route, which checks the
+        // cooldown BEFORE calling updateUser and stamps AFTER.
+        if (candidate && ctx.path === "/update-user") {
+          const changeSession = await getSessionFromCtx(ctx).catch(() => null);
+          const changerId = changeSession?.user?.id;
+          if (changerId) {
+            const rows = await db
+              .select({ username: userTable.username, usernameChangedAt: userTable.usernameChangedAt })
+              .from(userTable)
+              .where(eq(userTable.id, changerId))
+              .limit(1);
+            const changedAt = rows[0]?.usernameChangedAt;
+            // A no-op "change" to the handle you already hold isn't a change.
+            if (rows[0] && rows[0].username !== candidate && changedAt) {
+              if (new Date(changedAt.getTime() + COOLDOWN_MS) > new Date()) {
+                throw new APIError("TOO_MANY_REQUESTS", {
+                  message: "You can only change your username once every 30 days",
+                });
+              }
+            }
+          }
         }
       }
 
