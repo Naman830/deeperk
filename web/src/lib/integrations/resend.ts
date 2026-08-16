@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 
-// Lazily constructed so importing this module (e.g. from web/src/lib/auth.ts,
+// Lazily constructed so importing this module (e.g. from web/src/lib/auth/server.ts,
 // which loads at build/type-check/CLI-generate time too, not just at request
 // time) never fails just because RESEND_API_KEY isn't set yet — the Resend
 // constructor itself throws immediately on a missing key. See web/.env.local.
