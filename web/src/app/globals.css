@@ -1,25 +1,158 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-/* Design tokens. Referenced as bg-background, text-foreground, text-muted, etc. */
-@theme {
-  --color-background: #ffffff;
-  --color-foreground: #171717;
-  --color-muted: #6b7280;
-  --color-border: #e5e7eb;
+/* Theme is a `.dark` class on <html>, stamped before first paint by the inline
+   script in layout.tsx (see components/theme-provider.tsx). */
+@custom-variant dark (&:where(.dark, .dark *));
 
+@theme inline {
+  --font-heading: var(--font-geist-sans);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background: #0a0a0a;
-    --color-foreground: #ededed;
-    --color-muted: #9ca3af;
-    --color-border: #262626;
+/* Light. `--sidebar` is the app's rail + list column; `--background` is the
+   main pane, so the two panels read as distinct surfaces. */
+:root {
+  --radius: 0.625rem;
+
+  --background: #ffffff;
+  --foreground: #14161a;
+  --card: #ffffff;
+  --card-foreground: #14161a;
+  --popover: #ffffff;
+  --popover-foreground: #14161a;
+  --primary: #3f4fd1;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f2f6;
+  --secondary-foreground: #14161a;
+  --muted: #f1f2f6;
+  --muted-foreground: #61666d;
+  --accent: #eceefc;
+  --accent-foreground: #3341b8;
+  --destructive: #d93036;
+  --destructive-foreground: #ffffff;
+  --success: #2f9e63;
+  --border: #e3e6ea;
+  --input: #e3e6ea;
+  --ring: #3f4fd1;
+  --chart-1: #3f4fd1;
+  --chart-2: #2f9e63;
+  --chart-3: #d98324;
+  --chart-4: #8b5cd6;
+  --chart-5: #d93036;
+  --sidebar: #f7f8fa;
+  --sidebar-foreground: #14161a;
+  --sidebar-primary: #3f4fd1;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eceefc;
+  --sidebar-accent-foreground: #3341b8;
+  --sidebar-border: #e3e6ea;
+  --sidebar-ring: #3f4fd1;
+}
+
+/* Dark — the app's designed default, matching the reference sketch. */
+.dark {
+  --background: #0b0c0f;
+  --foreground: #e8eaed;
+  --card: #131519;
+  --card-foreground: #e8eaed;
+  --popover: #16191f;
+  --popover-foreground: #e8eaed;
+  --primary: #5b6cff;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1d23;
+  --secondary-foreground: #e8eaed;
+  --muted: #1a1d23;
+  --muted-foreground: #9aa0a9;
+  --accent: #1e2340;
+  --accent-foreground: #a5b0ff;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --success: #30a46c;
+  --border: #23262d;
+  --input: #262a32;
+  --ring: #5b6cff;
+  --chart-1: #5b6cff;
+  --chart-2: #30a46c;
+  --chart-3: #e2a03f;
+  --chart-4: #a78bfa;
+  --chart-5: #e5484d;
+  --sidebar: #131519;
+  --sidebar-foreground: #e8eaed;
+  --sidebar-primary: #5b6cff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e2340;
+  --sidebar-accent-foreground: #a5b0ff;
+  --sidebar-border: #23262d;
+  --sidebar-ring: #5b6cff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-body {
-  font-family: var(--font-sans);
+/* Thin scrollbars in the two scrolling columns — default chrome is heavy
+   against a 320px panel. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
 }

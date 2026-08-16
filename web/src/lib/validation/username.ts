@@ -19,6 +19,10 @@ export const RESERVED_USERNAMES = new Set([
   "login",
   "signup",
   "settings",
+  // Static route segments that would shadow a real handle: /api/users/search
+  // wins over /api/users/[username], and /users/* is reserved for the same reason.
+  "search",
+  "users",
   "help",
   "about",
   "contact",

@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
+import { Check, Circle, Eye, EyeOff } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 type Requirement = { label: string; test: (value: string) => boolean };
 
@@ -20,24 +24,6 @@ type AuthFormFieldProps = {
   requirements?: { rules: Requirement[] };
 };
 
-function EyeIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-3.27 2.9A9.14 9.14 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 4.22-5.94M1 1l22 22" />
-      <path d="M14.12 14.12A3 3 0 1 1 9.88 9.88" />
-    </svg>
-  );
-}
-
 export function AuthFormField({
   label,
   name,
@@ -51,15 +37,17 @@ export function AuthFormField({
   showPasswordToggle,
   requirements,
 }: AuthFormFieldProps) {
+  const id = useId();
   const [visible, setVisible] = useState(false);
   const isPasswordToggle = type === "password" && showPasswordToggle;
   const inputType = isPasswordToggle ? (visible ? "text" : "password") : type;
 
   return (
-    <label className="flex flex-col gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
       <div className="relative">
-        <input
+        <Input
+          id={id}
           name={name}
           type={inputType}
           value={value}
@@ -67,17 +55,20 @@ export function AuthFormField({
           autoFocus={autoFocus}
           autoComplete={autoComplete}
           placeholder={placeholder}
-          className={`w-full rounded-md border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-foreground ${isPasswordToggle ? "pr-10" : ""}`}
+          aria-invalid={error ? true : undefined}
+          className={`h-10 ${isPasswordToggle ? "pr-10" : ""}`}
         />
         {isPasswordToggle && (
-          <button
+          <Button
             type="button"
-            onClick={() => setVisible((v) => !v)}
+            variant="ghost"
+            size="icon-sm"
             aria-label={visible ? "Hide password" : "Show password"}
-            className="text-muted hover:text-foreground absolute inset-y-0 right-0 flex items-center px-3"
+            onClick={() => setVisible((v) => !v)}
+            className="absolute inset-y-0 right-1 my-auto"
           >
-            {visible ? <EyeOffIcon /> : <EyeIcon />}
-          </button>
+            {visible ? <EyeOff /> : <Eye />}
+          </Button>
         )}
       </div>
       {requirements && (
@@ -85,14 +76,14 @@ export function AuthFormField({
           {requirements.rules.map((rule) => {
             const met = rule.test(value);
             return (
-              <li key={rule.label} className={met ? "text-green-500" : "text-muted"}>
-                {met ? "✓" : "○"} {rule.label}
+              <li key={rule.label} className={`flex items-center gap-1.5 text-xs ${met ? "text-success" : "text-muted-foreground"}`}>
+                {met ? <Check size={13} /> : <Circle size={13} />} {rule.label}
               </li>
             );
           })}
         </ul>
       )}
-      {error && <span className="text-red-500">{error}</span>}
-    </label>
+      {error && <p className="text-destructive text-xs">{error}</p>}
+    </div>
   );
 }

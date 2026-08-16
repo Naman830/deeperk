@@ -75,7 +75,7 @@ export default function ForgotPasswordPage() {
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 px-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Reset password</h1>
-        <p className="text-muted text-sm">
+        <p className="text-muted-foreground text-sm">
           {step === "email"
             ? "Enter your email and we'll send a reset code if an account exists."
             : `Enter the code sent to ${email} and choose a new password.`}
@@ -97,7 +97,7 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? "Sending…" : "Send reset code"}
           </button>
@@ -119,14 +119,14 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? "Resetting…" : "Reset password"}
           </button>
         </form>
       )}
 
-      <Link href="/login" className="text-muted text-sm hover:text-foreground">
+      <Link href="/login" className="text-muted-foreground text-sm hover:text-foreground">
         Back to login
       </Link>
     </main>

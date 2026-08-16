@@ -56,7 +56,7 @@ export function LoginForm() {
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 px-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
-        <p className="text-muted text-sm">Welcome back to ChatSphere.</p>
+        <p className="text-muted-foreground text-sm">Welcome back to ChatSphere.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -82,17 +82,17 @@ export function LoginForm() {
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {submitting ? "Logging in…" : "Log in"}
         </button>
       </form>
 
       <div className="flex justify-between text-sm">
-        <Link href="/login/forgot-password" className="text-muted hover:text-foreground">
+        <Link href="/login/forgot-password" className="text-muted-foreground hover:text-foreground">
           Forgot password?
         </Link>
-        <Link href="/signup" className="text-muted hover:text-foreground">
+        <Link href="/signup" className="text-muted-foreground hover:text-foreground">
           Create an account
         </Link>
       </div>
