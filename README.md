@@ -27,7 +27,7 @@ Tick a task off below when it's done, and update `CLAUDE.md` with any decision m
 
 - [x] Auth (signup OTP flow, login, forgot-password — Better Auth)
 - [x] Profile (fields, privacy, public view, username + 30-day hold, email change, delete, avatar)
-- [ ] Search
+- [x] Search (`GET /api/users/search`)
 - [ ] Chat (REST + Socket.IO)
 - [ ] Call signaling (Socket.IO, `server/`)
 
@@ -41,7 +41,7 @@ Not part of any API surface — both need a scheduler, and none is chosen yet. N
 ### 3. Frontend
 
 - [x] Auth (login, signup, forgot-password pages)
-- [ ] Profile
-- [ ] Search
+- [x] Profile (app shell, `/settings/*`, `/u/[username]`)
+- [x] Search (in the chats column + standalone `/search`)
 - [ ] Chat
 - [ ] Call
