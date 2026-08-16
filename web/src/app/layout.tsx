@@ -36,7 +36,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </ThemeProvider>
-        <ToastContainer position="top-center" theme="colored" />
+        {/* theme="light" so the --toastify-*-light vars apply; globals.css remaps
+            them to the design tokens and re-keys them on .dark. "colored" ignored
+            the palette, so toasts never matched the theme picker. */}
+        <ToastContainer position="top-center" theme="light" />
       </body>
     </html>
   );

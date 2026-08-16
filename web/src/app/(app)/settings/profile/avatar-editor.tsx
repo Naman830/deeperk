@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Cropper, { type Area } from "react-easy-crop";
 import { toast } from "react-toastify";
@@ -54,6 +54,8 @@ export function AvatarEditor({ avatarUrl, firstName, lastName }: AvatarEditorPro
   const [zoom, setZoom] = useState(1);
   const [croppedArea, setCroppedArea] = useState<Area | null>(null);
   const [busy, setBusy] = useState(false);
+  // Keeps the buttons disabled until the refreshed server data actually lands.
+  const [refreshing, startRefresh] = useTransition();
 
   const onCropComplete = useCallback((_area: Area, areaPixels: Area) => setCroppedArea(areaPixels), []);
 
@@ -95,7 +97,7 @@ export function AvatarEditor({ avatarUrl, firstName, lastName }: AvatarEditorPro
       }
       closeCropper();
       toast.success("Photo updated");
-      router.refresh();
+      startRefresh(() => router.refresh());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : GENERIC_ERROR);
     } finally {
@@ -112,7 +114,7 @@ export function AvatarEditor({ avatarUrl, firstName, lastName }: AvatarEditorPro
       return;
     }
     toast.success("Photo removed");
-    router.refresh();
+    startRefresh(() => router.refresh());
   }
 
   return (
@@ -121,11 +123,11 @@ export function AvatarEditor({ avatarUrl, firstName, lastName }: AvatarEditorPro
 
       <div className="flex flex-wrap gap-2">
         <input ref={fileInputRef} type="file" accept={ACCEPT} onChange={handleFile} className="hidden" />
-        <Button variant="outline" size="lg" disabled={busy} onClick={() => fileInputRef.current?.click()}>
+        <Button variant="outline" size="lg" disabled={busy || refreshing} onClick={() => fileInputRef.current?.click()}>
           <Upload /> {avatarUrl ? "Change photo" : "Upload photo"}
         </Button>
         {avatarUrl && (
-          <Button variant="destructive" size="lg" disabled={busy} onClick={handleRemove}>
+          <Button variant="destructive" size="lg" disabled={busy || refreshing} onClick={handleRemove}>
             <Trash2 /> Remove
           </Button>
         )}
@@ -166,10 +168,10 @@ export function AvatarEditor({ avatarUrl, firstName, lastName }: AvatarEditorPro
           />
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeCropper} disabled={busy}>
+            <Button variant="outline" onClick={closeCropper} disabled={busy || refreshing}>
               Cancel
             </Button>
-            <Button onClick={handleUpload} disabled={busy || !croppedArea}>
+            <Button onClick={handleUpload} disabled={busy || refreshing || !croppedArea}>
               {busy ? "Uploading…" : "Save photo"}
             </Button>
           </DialogFooter>

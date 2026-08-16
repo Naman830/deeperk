@@ -130,6 +130,33 @@
   --sidebar-ring: #5b6cff;
 }
 
+/* react-toastify, mapped onto the design tokens.
+ *
+ * ToastContainer runs theme="light" and these vars do the theming, keyed on the
+ * same `.dark` class as everything else. It is CSS rather than a `theme` prop
+ * because <ToastContainer> is mounted OUTSIDE <ThemeProvider> in layout.tsx, so
+ * a useTheme()-driven prop would throw. theme="colored" (the old value) ignored
+ * the palette entirely, so toasts never matched the theme picker.
+ *
+ * ORDERING TRAP: layout.tsx imports ReactToastify.css BEFORE globals.css. Both
+ * :root blocks are unlayered and equal-specificity, so these win only by source
+ * order — swapping those two imports silently reverts this. */
+:root,
+.dark {
+  --toastify-color-light: var(--popover);
+  --toastify-text-color-light: var(--popover-foreground);
+  --toastify-color-progress-light: var(--primary);
+  --toastify-icon-color-success: var(--success);
+  --toastify-icon-color-error: var(--destructive);
+  --toastify-icon-color-info: var(--primary);
+  --toastify-icon-color-warning: var(--warning, var(--primary));
+  --toastify-font-family: inherit;
+  --toastify-toast-bd-radius: var(--radius-lg, 0.625rem);
+  --toastify-color-progress-success: var(--success);
+  --toastify-color-progress-error: var(--destructive);
+  --toastify-color-progress-info: var(--primary);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

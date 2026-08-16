@@ -7,7 +7,7 @@ import { ListColumn } from "@/components/features/shell/list-column";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [
-  { href: "/settings", label: "Profile", description: "Name, photo, bio and links", icon: UserRound },
+  { href: "/settings/profile", label: "Profile", description: "Name, photo, bio and links", icon: UserRound },
   { href: "/settings/privacy", label: "Privacy", description: "Who can find and see you", icon: Shield },
   { href: "/settings/account", label: "Account", description: "Username, email, password", icon: Wrench },
   { href: "/settings/appearance", label: "Appearance", description: "Theme", icon: Palette },
@@ -20,8 +20,9 @@ export function SettingsNav() {
     <ListColumn title="Settings">
       <nav className="flex flex-col gap-0.5">
         {SECTIONS.map(({ href, label, description, icon: Icon }) => {
-          // Exact match for /settings so it doesn't stay lit on every subsection.
-          const active = href === "/settings" ? pathname === href : pathname.startsWith(href);
+          // Every section now has its own route, so a uniform prefix match works —
+          // no special case for the index.
+          const active = pathname.startsWith(href);
           return (
             <Link
               key={href}

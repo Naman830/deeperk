@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,9 @@ export function DeleteCard({ username, deletionScheduledAt }: { username: string
   const [confirmUsername, setConfirmUsername] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  // The dialog closes before the refresh resolves, so the card trigger is the only
+  // surface left to show that work is still in flight.
+  const [refreshing, startRefresh] = useTransition();
   const [scheduledAt, setScheduledAt] = useState<Date | null>(deletionScheduledAt);
 
   const matches = confirmUsername.trim().toLowerCase() === username.toLowerCase();
@@ -44,7 +47,7 @@ export function DeleteCard({ username, deletionScheduledAt }: { username: string
     setPassword("");
     setConfirmUsername("");
     toast.info("Account scheduled for deletion.");
-    router.refresh();
+    startRefresh(() => router.refresh());
   }
 
   return (
@@ -58,7 +61,7 @@ export function DeleteCard({ username, deletionScheduledAt }: { username: string
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Button variant="destructive" size="lg" onClick={() => setOpen(true)} disabled={Boolean(scheduledAt)}>
+        <Button variant="destructive" size="lg" onClick={() => setOpen(true)} disabled={refreshing || Boolean(scheduledAt)}>
           {scheduledAt ? "Deletion scheduled" : "Delete my account"}
         </Button>
       </CardContent>

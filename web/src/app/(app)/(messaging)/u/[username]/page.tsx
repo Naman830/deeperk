@@ -66,7 +66,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
 
           {profile.isOwner ? (
             <Button asChild variant="outline" size="lg">
-              <Link href="/settings">
+              <Link href="/settings/profile">
                 <Pencil /> Edit profile
               </Link>
             </Button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { Plus, X } from "lucide-react";
@@ -30,6 +30,10 @@ export function ProfileForm({ profile }: { profile: OwnProfile }) {
   const [links, setLinks] = useState<LinkRow[]>(profile.socialLinks.map(({ platform, url }) => ({ platform, url })));
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  // router.refresh() is async — without a transition the button would go back to
+  // "Save" while the new server data is still in flight, then the form would
+  // update underneath the user.
+  const [refreshing, startRefresh] = useTransition();
 
   function updateLink(index: number, patch: Partial<LinkRow>) {
     setLinks((current) => current.map((link, i) => (i === index ? { ...link, ...patch } : link)));
@@ -59,7 +63,7 @@ export function ProfileForm({ profile }: { profile: OwnProfile }) {
       return;
     }
     toast.success("Profile saved");
-    router.refresh();
+    startRefresh(() => router.refresh());
   }
 
   return (
@@ -70,7 +74,7 @@ export function ProfileForm({ profile }: { profile: OwnProfile }) {
           <CardDescription>This is what people see on your public profile.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 @md/pane:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={firstNameId}>First name</Label>
               <Input id={firstNameId} value={firstName} onChange={(e) => setFirstName(e.target.value)} maxLength={25} className="h-9" />
@@ -109,14 +113,16 @@ export function ProfileForm({ profile }: { profile: OwnProfile }) {
           {links.length === 0 && <p className="text-muted-foreground text-sm">No links yet.</p>}
 
           {links.map((link, index) => (
-            <div key={index} className="flex items-center gap-2">
+            // Stacks below @sm/pane. Unconditional `w-32 shrink-0` left the URL
+            // field around 100px in the narrow band, and zero-width at 768px.
+            <div key={index} className="flex flex-col gap-2 @sm/pane:flex-row @sm/pane:items-center">
               <Input
                 value={link.platform}
                 onChange={(e) => updateLink(index, { platform: e.target.value })}
                 placeholder="Platform"
                 aria-label={`Link ${index + 1} platform`}
                 maxLength={50}
-                className="h-9 w-32 shrink-0"
+                className="h-9 @sm/pane:w-32 @sm/pane:shrink-0"
               />
               <Input
                 value={link.url}
@@ -130,6 +136,7 @@ export function ProfileForm({ profile }: { profile: OwnProfile }) {
                 type="button"
                 variant="ghost"
                 size="icon-sm"
+                className="self-end @sm/pane:self-auto"
                 aria-label={`Remove link ${index + 1}`}
                 onClick={() => setLinks((current) => current.filter((_, i) => i !== index))}
               >
@@ -155,8 +162,8 @@ export function ProfileForm({ profile }: { profile: OwnProfile }) {
       {error && <p className="text-destructive text-sm">{error}</p>}
 
       <div className="flex justify-end">
-        <Button type="submit" size="lg" disabled={saving}>
-          {saving ? "Saving…" : "Save changes"}
+        <Button type="submit" size="lg" disabled={saving || refreshing}>
+          {saving || refreshing ? "Saving…" : "Save changes"}
         </Button>
       </div>
     </form>

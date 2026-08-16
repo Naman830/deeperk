@@ -16,7 +16,11 @@ export function SettingsPane({ title, children }: { title: string; children: Rea
         </Button>
         <h1 className="font-heading truncate text-base font-semibold">{title}</h1>
       </header>
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+      {/* @container/pane so fields inside respond to the PANE width, not the
+          viewport. At exactly 768px the rail (240) + list (320) leave ~208px here,
+          which is narrower than a 360px phone — viewport breakpoints get that
+          backwards and were forcing two-column layouts into ~60px each. */}
+      <div className="@container/pane scroll-thin min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-6 md:px-6">{children}</div>
       </div>
     </MainPane>

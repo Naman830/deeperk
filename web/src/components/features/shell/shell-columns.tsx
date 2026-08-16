@@ -8,6 +8,12 @@ type ShellColumnsProps = {
   children: React.ReactNode;
   // Pathname prefixes that count as "detail" routes. On mobile only one column
   // fits, so a detail route replaces the list instead of sitting beside it.
+  //
+  // Convention: pass the section prefix WITH a trailing slash ("/settings/",
+  // "/calls/"). That makes the section root the index and every child a detail
+  // route automatically. Enumerating children instead means each new child
+  // silently becomes unreachable on mobile until someone remembers this list —
+  // which is exactly how /calls shipped with no prefixes at all.
   detailPrefixes?: string[];
 };
 

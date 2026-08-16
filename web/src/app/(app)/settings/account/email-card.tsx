@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,9 @@ export function EmailCard({ email }: { email: string }) {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  // The dialog closes before the refresh resolves, so the card trigger is the only
+  // surface left to show that work is still in flight.
+  const [refreshing, startRefresh] = useTransition();
 
   function reset() {
     setStep("closed");
@@ -73,7 +76,7 @@ export function EmailCard({ email }: { email: string }) {
 
     toast.success("Email updated. Other sessions have been signed out.");
     reset();
-    router.refresh();
+    startRefresh(() => router.refresh());
   }
 
   return (
@@ -84,7 +87,7 @@ export function EmailCard({ email }: { email: string }) {
       </CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm">{email}</span>
-        <Button variant="outline" size="lg" onClick={() => setStep("credentials")}>
+        <Button variant="outline" size="lg" onClick={() => setStep("credentials")} disabled={refreshing}>
           Change email
         </Button>
       </CardContent>

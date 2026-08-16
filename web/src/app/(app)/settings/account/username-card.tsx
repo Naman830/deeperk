@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -38,6 +38,8 @@ export function UsernameCard({
   const [value, setValue] = useState(displayUsername);
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  // Holds the button in its saving state until the refreshed data lands.
+  const [refreshing, startRefresh] = useTransition();
   // Server-authoritative once a 429 comes back; seeded from the DB timestamp.
   const [lockedUntil, setLockedUntil] = useState<Date | null>(() => nextChangeDate(usernameChangedAt));
 
@@ -90,7 +92,7 @@ export function UsernameCard({
     toast.success("Username updated");
     // Starting now, the cooldown and the 30-day hold on the old handle both run.
     setLockedUntil(nextChangeDate(new Date()));
-    router.refresh();
+    startRefresh(() => router.refresh());
   }
 
   return (
@@ -135,8 +137,8 @@ export function UsernameCard({
 
             {error && <p className="text-destructive text-sm">{error}</p>}
 
-            <Button type="submit" size="lg" className="self-start" disabled={saving || !changed || Boolean(shapeError)}>
-              {saving ? "Saving…" : "Change username"}
+            <Button type="submit" size="lg" className="self-start" disabled={saving || refreshing || !changed || Boolean(shapeError)}>
+              {saving || refreshing ? "Saving…" : "Change username"}
             </Button>
           </form>
         )}

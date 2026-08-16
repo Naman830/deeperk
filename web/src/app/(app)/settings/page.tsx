@@ -1,39 +1,27 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth/session";
-import { getOwnProfile } from "@/lib/profile/own-profile";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { SettingsPane } from "./settings-pane";
-import { AvatarEditor } from "./avatar-editor";
-import { ProfileForm } from "./profile-form";
-import { DeletionBanner } from "./deletion-banner";
+import { SlidersHorizontal } from "lucide-react";
+import { MainPane } from "@/components/features/shell/main-pane";
+import { EmptyState } from "@/components/features/shell/empty-state";
 
-export const metadata: Metadata = { title: "Profile settings" };
+export const metadata: Metadata = { title: "Settings" };
 
-export default async function ProfileSettingsPage() {
-  const session = await getSession();
-  if (!session) redirect("/login");
-
-  // Owner bundle — a different query from the public view, so a private field
-  // can't leak by accident (Docs/user/profile.md §intro).
-  const profile = await getOwnProfile(session.user.id);
-  if (!profile) redirect("/login");
-
+// /settings is a pure index, the same shape /chats and /calls already use: on
+// mobile ShellColumns shows only the section list, on desktop this placeholder
+// sits beside it. Profile lives at /settings/profile because it needs a detail
+// route of its own — while it was the index, tapping "Profile" on a phone
+// navigated to the route you were already on, so the editor was unreachable.
+//
+// Deliberately NOT a redirect to /settings/profile: SettingsPane's mobile back
+// link points at /settings, so a redirect here would bounce straight back and
+// loop.
+export default function SettingsIndexPage() {
   return (
-    <SettingsPane title="Profile">
-      <DeletionBanner deletionScheduledAt={profile.deletionScheduledAt} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Photo</CardTitle>
-          <CardDescription>JPG, PNG or WebP · up to 5MB · at least 200×200.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AvatarEditor avatarUrl={profile.avatarUrl} firstName={profile.firstName} lastName={profile.lastName} />
-        </CardContent>
-      </Card>
-
-      <ProfileForm profile={profile} />
-    </SettingsPane>
+    <MainPane centered>
+      <EmptyState
+        icon={<SlidersHorizontal size={28} />}
+        title="Settings"
+        description="Choose a section to get started."
+      />
+    </MainPane>
   );
 }
