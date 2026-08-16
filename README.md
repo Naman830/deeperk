@@ -26,22 +26,17 @@ Tick a task off below when it's done, and update `CLAUDE.md` with any decision m
 ### 2. API (REST + Socket.IO)
 
 - [x] Auth (signup OTP flow, login, forgot-password — Better Auth)
-- [ ] Profile — see "Profile — remaining work" below
+- [x] Profile (fields, privacy, public view, username + 30-day hold, email change, delete, avatar)
 - [ ] Search
 - [ ] Chat (REST + Socket.IO)
 - [ ] Call signaling (Socket.IO, `server/`)
 
-### Profile — remaining work
+### Deferred background jobs
 
-Tracking section for the Profile API build-out (removed once everything below is checked off and the "Profile" line above is ticked instead).
+Not part of any API surface — both need a scheduler, and none is chosen yet. Neither is user-visible when missing, which is exactly why they're easy to forget:
 
-- [x] Core profile fields (`GET`/`PATCH /api/me`) + social links
-- [x] Privacy settings (`GET`/`PATCH /api/me/privacy`)
-- [x] Public profile view (`GET /api/users/[username]`)
-- [x] Username change (`PATCH /api/me/username`, 30-day cooldown) — old-handle 30-day reservation not implemented, no schema for it yet
-- [x] Email change flow (`POST /api/me/email/start`, `POST /api/me/email/verify`)
-- [x] Delete-account flow (`POST /api/me/delete`, 30-day grace, cancels on next login)
-- [ ] Avatar upload — blocked on Cloudinary credentials
+- [ ] Nightly anonymizer for accounts past their 30-day `deletionScheduledAt` window. Should also destroy the user's `avatars/<userId>/` folder, and can sweep `reserved_username` rows where `expires_at < now()` in the same pass.
+- [ ] Nightly orphaned-Cloudinary-asset sweep — list the `avatars/<userId>/` prefix, delete anything that isn't that row's current `avatarPublicId`.
 
 ### 3. Frontend
 
