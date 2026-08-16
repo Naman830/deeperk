@@ -32,6 +32,16 @@ export const updateProfileSchema = z.object({
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
+// Avatar rules per Docs/user/profile.md §4. maxPixels is our own ceiling, kept
+// under Cloudinary's per-image megapixel limit so an oversized source fails
+// here with a clear message instead of upstream.
+export const AVATAR_RULES = {
+  maxBytes: 5 * 1024 * 1024,
+  minDimension: 200,
+  maxPixels: 25_000_000,
+  formats: ["jpeg", "png", "webp"] as const,
+};
+
 // discoverable / onlineStatus / profileDetails — no FRIENDS tier yet (no
 // relationship graph), so plain EVERYONE/NOBODY per Docs/user/profile.md §3.
 export const privacyAudienceSchema = z.enum(["EVERYONE", "NOBODY"]);
