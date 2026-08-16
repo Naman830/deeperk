@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiPost, GENERIC_ERROR } from "@/lib/api-client";
+import { FormError } from "@/components/features/shell/form-error";
 
 /**
  * Docs/user/profile.md §2 — password + typed username, then a 30-day grace
@@ -100,7 +101,7 @@ export function DeleteCard({ username, deletionScheduledAt }: { username: string
                   className="h-9"
                 />
               </div>
-              {error && <p className="text-destructive text-sm">{error}</p>}
+              <FormError>{error}</FormError>
             </div>
 
             <DialogFooter>

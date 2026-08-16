@@ -22,6 +22,8 @@ import {
 } from "@/lib/validation/signup";
 import { usernameRequirements } from "@/lib/validation/username";
 import { apiPost } from "@/lib/api-client";
+import { FormError } from "@/components/features/shell/form-error";
+import { Button } from "@/components/ui/button";
 
 type Step = "email" | "otp" | "firstName" | "lastName" | "username" | "birthDate" | "password";
 
@@ -31,9 +33,9 @@ type UsernameCheckStatus = "idle" | "checking" | "available" | "taken" | "error"
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="text-muted-foreground self-start text-sm hover:text-foreground">
+    <Button type="button" variant="link" size="sm" onClick={onClick} className="text-muted-foreground self-start px-0">
       ← Back
-    </button>
+    </Button>
   );
 }
 
@@ -273,23 +275,23 @@ export function SignupForm() {
       {step === "email" && (
         <form onSubmit={handleEmailSubmit} className="flex flex-col gap-4">
           <AuthFormField label="Email" name="email" type="email" value={email} onChange={setEmail} autoFocus autoComplete="email" />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button type="submit" disabled={submitting} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <FormError>{error}</FormError>
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Sending code…" : "Continue"}
-          </button>
+          </Button>
         </form>
       )}
 
       {step === "otp" && (
         <form onSubmit={handleOtpSubmit} className="flex flex-col gap-4">
           <AuthFormField label={`Code sent to ${email}`} name="otp" value={otp} onChange={setOtp} autoFocus />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button type="submit" disabled={submitting} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <FormError>{error}</FormError>
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Verifying…" : "Verify"}
-          </button>
-          <button type="button" onClick={handleResendOtp} className="text-muted-foreground text-sm hover:text-foreground">
+          </Button>
+          <Button type="button" variant="link" size="sm" onClick={handleResendOtp} className="text-muted-foreground px-0">
             Resend code
-          </button>
+          </Button>
           <BackButton onClick={goBack} />
         </form>
       )}
@@ -297,10 +299,10 @@ export function SignupForm() {
       {step === "firstName" && (
         <form onSubmit={handleFirstNameSubmit} className="flex flex-col gap-4">
           <AuthFormField label="First name" name="firstName" value={firstName} onChange={setFirstName} autoFocus />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+          <FormError>{error}</FormError>
+          <Button type="submit">
             Continue
-          </button>
+          </Button>
           <BackButton onClick={goBack} />
         </form>
       )}
@@ -308,10 +310,10 @@ export function SignupForm() {
       {step === "lastName" && (
         <form onSubmit={handleLastNameSubmit} className="flex flex-col gap-4">
           <AuthFormField label="Last name (optional)" name="lastName" value={lastName} onChange={setLastName} autoFocus />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+          <FormError>{error}</FormError>
+          <Button type="submit">
             Continue
-          </button>
+          </Button>
           <BackButton onClick={goBack} />
         </form>
       )}
@@ -327,16 +329,12 @@ export function SignupForm() {
             requirements={{ rules: usernameRequirements }}
           />
           {displayedUsernameStatus === "checking" && <p className="text-muted-foreground text-sm">Checking availability…</p>}
-          {displayedUsernameStatus === "available" && <p className="text-sm text-green-500">✓ Available</p>}
-          {displayedUsernameStatus === "taken" && <p className="text-sm text-red-500">✗ Already taken</p>}
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button
-            type="submit"
-            disabled={submitting || displayedUsernameStatus === "checking"}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
+          {displayedUsernameStatus === "available" && <p className="text-success text-sm">✓ Available</p>}
+          {displayedUsernameStatus === "taken" && <p className="text-destructive text-sm">✗ Already taken</p>}
+          <FormError>{error}</FormError>
+          <Button type="submit" disabled={submitting || displayedUsernameStatus === "checking"}>
             {submitting ? "Checking…" : "Continue"}
-          </button>
+          </Button>
           <BackButton onClick={goBack} />
         </form>
       )}
@@ -344,10 +342,10 @@ export function SignupForm() {
       {step === "birthDate" && (
         <form onSubmit={handleBirthDateSubmit} className="flex flex-col gap-4">
           <AuthFormField label="Date of birth" name="birthDate" type="date" value={birthDate} onChange={setBirthDate} autoFocus />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+          <FormError>{error}</FormError>
+          <Button type="submit">
             Continue
-          </button>
+          </Button>
           <BackButton onClick={goBack} />
         </form>
       )}
@@ -365,10 +363,10 @@ export function SignupForm() {
             showPasswordToggle
             requirements={{ rules: passwordRequirements }}
           />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button type="submit" disabled={submitting} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+          <FormError>{error}</FormError>
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Creating account…" : "Create account"}
-          </button>
+          </Button>
           <BackButton onClick={goBack} />
         </form>
       )}

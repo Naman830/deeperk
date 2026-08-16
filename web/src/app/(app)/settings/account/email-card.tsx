@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiPost, GENERIC_ERROR } from "@/lib/api-client";
+import { FormError } from "@/components/features/shell/form-error";
 
 type Step = "closed" | "credentials" | "otp";
 
@@ -124,7 +125,7 @@ export function EmailCard({ email }: { email: string }) {
                     className="h-9"
                   />
                 </div>
-                {error && <p className="text-destructive text-sm">{error}</p>}
+                <FormError>{error}</FormError>
               </div>
 
               <DialogFooter>
@@ -156,7 +157,7 @@ export function EmailCard({ email }: { email: string }) {
                     className="h-9 tracking-[0.4em]"
                   />
                 </div>
-                {error && <p className="text-destructive text-sm">{error}</p>}
+                <FormError>{error}</FormError>
               </div>
 
               <DialogFooter>

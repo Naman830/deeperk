@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { SearchX } from "lucide-react";
+import { SearchX, Timer } from "lucide-react";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { UserAvatar } from "@/components/features/profile/user-avatar";
 import { EmptyState } from "@/components/features/shell/empty-state";
@@ -81,7 +81,9 @@ export function UserSearchResults({ query }: { query: string }) {
   }
 
   if (outcome?.limited) {
-    return <p className="text-destructive px-3 py-4 text-sm">Slow down — too many searches. Try again in a moment.</p>;
+    // Region state, not a form error — same treatment as "No one found" directly
+    // below, rather than a stray line of red text. See FormError's channel rule.
+    return <EmptyState icon={<Timer size={28} />} title="Too many searches" description="Slow down for a moment, then try again." />;
   }
 
   if (!outcome || outcome.results.length === 0) {

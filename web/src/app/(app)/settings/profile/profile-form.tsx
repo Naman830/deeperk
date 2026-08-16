@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { apiPatch, GENERIC_ERROR } from "@/lib/api-client";
 import { updateProfileSchema } from "@/lib/validation/profile";
 import type { OwnProfile } from "@/lib/profile/own-profile";
+import { FormError } from "@/components/features/shell/form-error";
 
 const MAX_BIO = 250;
 const MAX_LINKS = 4;
@@ -159,7 +160,7 @@ export function ProfileForm({ profile }: { profile: OwnProfile }) {
         </CardContent>
       </Card>
 
-      {error && <p className="text-destructive text-sm">{error}</p>}
+      <FormError>{error}</FormError>
 
       <div className="flex justify-end">
         <Button type="submit" size="lg" disabled={saving || refreshing}>

@@ -7,6 +7,8 @@ import { toast } from "react-toastify";
 import { requestPasswordResetOtp, resetPasswordWithOtp } from "@/lib/auth/client";
 import { AuthFormField } from "@/components/features/auth/auth-form-field";
 import { emailSchema, otpSchema, passwordSchema, passwordRequirements, getPasswordSubmitError } from "@/lib/validation/signup";
+import { FormError } from "@/components/features/shell/form-error";
+import { Button } from "@/components/ui/button";
 
 type Step = "email" | "reset";
 
@@ -93,14 +95,10 @@ export function ForgotPasswordForm() {
             autoFocus
             autoComplete="email"
           />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
+          <FormError>{error}</FormError>
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Sending…" : "Send reset code"}
-          </button>
+          </Button>
         </form>
       ) : (
         <form onSubmit={handleReset} className="flex flex-col gap-4">
@@ -115,14 +113,10 @@ export function ForgotPasswordForm() {
             showPasswordToggle
             requirements={{ rules: passwordRequirements }}
           />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
+          <FormError>{error}</FormError>
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Resetting…" : "Reset password"}
-          </button>
+          </Button>
         </form>
       )}
 

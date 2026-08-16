@@ -7,6 +7,7 @@ import { AuthFormField } from "@/components/features/auth/auth-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPasswordSubmitError, passwordRequirements } from "@/lib/validation/signup";
+import { FormError } from "@/components/features/shell/form-error";
 
 // Better Auth's core /change-password, reached through the /api/auth catch-all —
 // Docs/user/profile.md never specs an app-side route for this, so none is invented.
@@ -87,7 +88,7 @@ export function PasswordCard() {
             autoComplete="new-password"
           />
 
-          {error && <p className="text-destructive text-sm">{error}</p>}
+          <FormError>{error}</FormError>
 
           <Button type="submit" size="lg" className="self-start" disabled={saving || !currentPassword || !newPassword}>
             {saving ? "Saving…" : "Change password"}

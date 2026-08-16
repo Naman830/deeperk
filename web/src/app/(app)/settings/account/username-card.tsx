@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiPatch, GENERIC_ERROR } from "@/lib/api-client";
 import { getUsernameSubmitError, toCanonicalUsername } from "@/lib/validation/signup";
+import { FormError } from "@/components/features/shell/form-error";
 
 const COOLDOWN_DAYS = 30;
 
@@ -135,7 +136,7 @@ export function UsernameCard({
               )}
             </div>
 
-            {error && <p className="text-destructive text-sm">{error}</p>}
+            <FormError>{error}</FormError>
 
             <Button type="submit" size="lg" className="self-start" disabled={saving || refreshing || !changed || Boolean(shapeError)}>
               {saving || refreshing ? "Saving…" : "Change username"}

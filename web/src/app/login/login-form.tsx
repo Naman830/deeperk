@@ -7,6 +7,8 @@ import { toast } from "react-toastify";
 import { signIn } from "@/lib/auth/client";
 import { AuthFormField } from "@/components/features/auth/auth-form-field";
 import { loginSchema } from "@/lib/validation/login";
+import { FormError } from "@/components/features/shell/form-error";
+import { Button } from "@/components/ui/button";
 
 // Docs/user/auth.md §2 "Login" — any failure (wrong email OR wrong password)
 // shows the exact same generic error, so account existence is never leaked.
@@ -78,14 +80,10 @@ export function LoginForm() {
           autoComplete="current-password"
           showPasswordToggle
         />
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
+        <FormError>{error}</FormError>
+        <Button type="submit" disabled={submitting}>
           {submitting ? "Logging in…" : "Log in"}
-        </button>
+        </Button>
       </form>
 
       <div className="flex justify-between text-sm">
