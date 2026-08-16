@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
-import { auth } from "./auth";
-import { db } from "./db";
-import { eq } from "./drizzle-ops";
-import { user } from "../../../db/schema";
+import { auth } from "./server";
+import { db } from "../db";
+import { eq } from "../db/drizzle-ops";
+import { user } from "../../../../db/schema";
 
 /**
  * Server-side session read for server components / route handlers.
