@@ -1,7 +1,6 @@
 // Thin wrapper over fetch for this app's own /api/* routes, which always answer
-// JSON and use `{ error: string }` on failure. Mirrors the local postJson helper
-// the signup form already uses, promoted to a shared module now that every
-// Settings form needs it.
+// JSON and use `{ error: string }` on failure. The single place this app talks to
+// its own API — don't hand-roll a fetch alongside it.
 export type ApiResponse<T = Record<string, unknown>> = {
   ok: boolean;
   status: number;

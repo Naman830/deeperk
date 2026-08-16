@@ -1,13 +1,20 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { getIp } from "better-auth/api";
 import { eq } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { pendingRegistration } from "../../../../../../db/schema";
 import { emailSchema, otpSchema } from "@/lib/validation/signup";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { auth } from "@/lib/auth/server";
 import { signRegistrationToken, REGISTRATION_TOKEN_COOKIE, REGISTRATION_TOKEN_TTL_SECONDS } from "@/lib/auth/registration-token";
 
 const MAX_ATTEMPTS = 3;
+// The 3-attempt counter only bounds a single code. Without these, an attacker can
+// request a fresh code and burn three more guesses, indefinitely.
+const VERIFY_EMAIL_LIMIT = { windowSeconds: 60 * 60, max: 10 }; // 10/hr per email
+const VERIFY_IP_LIMIT = { windowSeconds: 60 * 60, max: 30 }; // 30/hr per IP
 
 function hashOtp(otp: string): string {
   return createHash("sha256").update(otp).digest("hex");
@@ -25,6 +32,16 @@ export async function POST(request: Request) {
   }
   const email = emailParsed.data;
   const otp = otpParsed.data;
+
+  const ip = getIp(request, auth.options) ?? "unknown";
+  const emailOk = await checkRateLimit(`signup-verify-email:${email}`, VERIFY_EMAIL_LIMIT.windowSeconds, VERIFY_EMAIL_LIMIT.max);
+  if (!emailOk) {
+    return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+  }
+  const ipOk = await checkRateLimit(`signup-verify-ip:${ip}`, VERIFY_IP_LIMIT.windowSeconds, VERIFY_IP_LIMIT.max);
+  if (!ipOk) {
+    return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+  }
 
   const rows = await db
     .select()

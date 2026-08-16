@@ -70,7 +70,17 @@ export async function POST(request: Request) {
       otpHash: hashOtp(otp),
       expiresAt: new Date(Date.now() + OTP_TTL_SECONDS * 1000),
     });
-    await sendEmailChangeOtpEmail(newEmail, otp);
+    // Trade-off, deliberate: reporting a delivery failure means that during a mail
+    // outage a 502 here reveals the address was free, since the taken branch above
+    // always returns 200. Accepted — the alternative is telling the user to check an
+    // inbox for a code that was never sent, leaving them permanently stuck. There is
+    // no leak while delivery is healthy.
+    try {
+      await sendEmailChangeOtpEmail(newEmail, otp);
+    } catch {
+      await db.delete(pendingContactChange).where(and(eq(pendingContactChange.userId, userId), eq(pendingContactChange.type, "EMAIL")));
+      return NextResponse.json({ error: "Couldn't send the code. Please try again." }, { status: 502 });
+    }
   }
 
   return NextResponse.json({ success: true });

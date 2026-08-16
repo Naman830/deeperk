@@ -57,7 +57,14 @@ export async function POST(request: Request) {
     expiresAt: new Date(Date.now() + OTP_TTL_SECONDS * 1000),
   });
 
-  await sendSignupOtpEmail(email, otp);
+  // A failed send must not read as success — otherwise the client shows "check your
+  // inbox" for a code that was never sent. Drop the row so a retry starts clean.
+  try {
+    await sendSignupOtpEmail(email, otp);
+  } catch {
+    await db.delete(pendingRegistration).where(eq(pendingRegistration.email, email));
+    return NextResponse.json({ error: "Couldn't send the code. Please try again." }, { status: 502 });
+  }
 
   return NextResponse.json({ success: true });
 }

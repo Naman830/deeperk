@@ -32,6 +32,24 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
 
+  // DEPLOYMENT PREREQUISITE. getIp() reads `x-forwarded-for`, and with no
+  // trustedProxies it trusts a single-value header verbatim — so a client can send
+  // its own and bypass every IP-keyed limit (signup-otp-ip, signup-create,
+  // signup-verify-ip, signup-check-email-ip, and Better Auth's own limiter).
+  // Harmless locally, wide open behind a real proxy. Set TRUSTED_PROXIES to the
+  // host's proxy CIDRs at deploy time; the chain is then stripped right-to-left to
+  // the first untrusted hop. There is no safe guessable default, which is why this
+  // is env-driven rather than hard-coded: disabling IP tracking entirely would be
+  // worse, collapsing every caller into one shared bucket.
+  advanced: {
+    ipAddress: {
+      trustedProxies: (process.env.TRUSTED_PROXIES ?? "")
+        .split(",")
+        .map((cidr) => cidr.trim())
+        .filter(Boolean),
+    },
+  },
+
   // Password login/reset.
   emailAndPassword: {
     enabled: true,

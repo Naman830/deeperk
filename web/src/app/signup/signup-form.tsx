@@ -21,22 +21,13 @@ import {
   getPasswordSubmitError,
 } from "@/lib/validation/signup";
 import { usernameRequirements } from "@/lib/validation/username";
+import { apiPost } from "@/lib/api-client";
 
 type Step = "email" | "otp" | "firstName" | "lastName" | "username" | "birthDate" | "password";
 
 const STEP_ORDER: Step[] = ["email", "otp", "firstName", "lastName", "username", "birthDate", "password"];
 
 type UsernameCheckStatus = "idle" | "checking" | "available" | "taken" | "error";
-
-async function postJson(url: string, body: unknown) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
-}
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
@@ -126,7 +117,7 @@ export function SignupForm() {
       return;
     }
     setSubmitting(true);
-    const check = await postJson("/api/signup/check-email", { email: parsed.data });
+    const check = await apiPost("/api/signup/check-email", { email: parsed.data });
     if (!check.ok) {
       setSubmitting(false);
       setError(check.data.error ?? "Something went wrong.");
@@ -138,7 +129,7 @@ export function SignupForm() {
       router.push("/login");
       return;
     }
-    const sent = await postJson("/api/signup/send-otp", { email: parsed.data });
+    const sent = await apiPost("/api/signup/send-otp", { email: parsed.data });
     setSubmitting(false);
     if (!sent.ok) {
       setError(sent.data.error ?? "Couldn't send the code. Please try again.");
@@ -152,7 +143,7 @@ export function SignupForm() {
 
   async function handleResendOtp() {
     setSubmitting(true);
-    const sent = await postJson("/api/signup/send-otp", { email });
+    const sent = await apiPost("/api/signup/send-otp", { email });
     setSubmitting(false);
     if (!sent.ok) {
       setError(sent.data.error ?? "Couldn't resend the code.");
@@ -170,7 +161,7 @@ export function SignupForm() {
       return;
     }
     setSubmitting(true);
-    const verify = await postJson("/api/signup/verify-otp", { email, otp: parsed.data });
+    const verify = await apiPost("/api/signup/verify-otp", { email, otp: parsed.data });
     setSubmitting(false);
     if (!verify.ok) {
       setError(verify.data.error ?? "Incorrect code.");
@@ -250,7 +241,7 @@ export function SignupForm() {
       return;
     }
     setSubmitting(true);
-    const complete = await postJson("/api/signup/complete", {
+    const complete = await apiPost("/api/signup/complete", {
       firstName,
       lastName,
       username,
