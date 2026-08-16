@@ -1,13 +1,13 @@
 import { randomInt, createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { eq } from "@/lib/drizzle-ops";
+import { eq } from "@/lib/db/drizzle-ops";
 import { getIp } from "better-auth/api";
 import { db } from "@/lib/db";
 import { user, pendingRegistration } from "../../../../../../db/schema";
 import { emailSchema } from "@/lib/validation/signup";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { sendSignupOtpEmail } from "@/lib/resend";
-import { auth } from "@/lib/auth";
+import { sendSignupOtpEmail } from "@/lib/integrations/resend";
+import { auth } from "@/lib/auth/server";
 
 const OTP_TTL_SECONDS = 5 * 60;
 const EMAIL_RATE_LIMIT = { windowSeconds: 60 * 60, max: 5 }; // 5/hr per email

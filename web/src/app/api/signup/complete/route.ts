@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { getIp } from "better-auth/api";
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { verifyRegistrationToken, REGISTRATION_TOKEN_COOKIE } from "@/lib/registration-token";
+import { verifyRegistrationToken, REGISTRATION_TOKEN_COOKIE } from "@/lib/auth/registration-token";
 import { signupCompleteSchema, toCanonicalUsername } from "@/lib/validation/signup";
 
 const ACCOUNT_CREATION_RATE_LIMIT = { windowSeconds: 60 * 60, max: 3 }; // 3/hr per IP

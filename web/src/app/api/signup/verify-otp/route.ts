@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { eq } from "@/lib/drizzle-ops";
+import { eq } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { pendingRegistration } from "../../../../../../db/schema";
 import { emailSchema, otpSchema } from "@/lib/validation/signup";
-import { signRegistrationToken, REGISTRATION_TOKEN_COOKIE, REGISTRATION_TOKEN_TTL_SECONDS } from "@/lib/registration-token";
+import { signRegistrationToken, REGISTRATION_TOKEN_COOKIE, REGISTRATION_TOKEN_TTL_SECONDS } from "@/lib/auth/registration-token";
 
 const MAX_ATTEMPTS = 3;
 

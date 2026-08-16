@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "@/lib/drizzle-ops";
+import { eq } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { user } from "../../../../../../db/schema";
 import { emailSchema } from "@/lib/validation/signup";
