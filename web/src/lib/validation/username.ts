@@ -3,7 +3,7 @@
 // stored lowercase, unique case-insensitively, reserved-word blocklist.
 //
 // Length (3–30) is enforced separately by the `username` Better Auth plugin's
-// minUsernameLength/maxUsernameLength config (web/src/lib/auth.ts) — this file
+// minUsernameLength/maxUsernameLength config (web/src/lib/auth/server.ts) — this file
 // only owns the character-shape rule and the reserved-word list, so both the
 // plugin's usernameValidator and any custom (unauthenticated, pre-signup)
 // check-username route share exactly one source of truth.
