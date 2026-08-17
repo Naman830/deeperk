@@ -8,6 +8,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { AVATAR_RULES } from "@/lib/validation/profile";
 import { uploadImage, destroyImage, CloudinaryNotConfiguredError, AVATAR_FOLDER } from "@/lib/integrations/cloudinary";
 import { avatarUrl } from "@/lib/avatar-url";
+import { logServerError } from "@/lib/log";
 
 export const runtime = "nodejs"; // sharp and the Cloudinary SDK need Node APIs
 
@@ -88,6 +89,11 @@ export async function POST(request: Request) {
     if (err instanceof CloudinaryNotConfiguredError) {
       return NextResponse.json({ error: "Avatar uploads aren't configured" }, { status: 503 });
     }
+    // The client only ever sees the generic message, so without this the actual
+    // cause is lost — a restricted API key answers 403 `missing permissions
+    // (actions=["create"])`, which is indistinguishable from a transient outage
+    // until you read it.
+    logServerError("avatar:upload", err);
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 502 });
   }
 
@@ -96,7 +102,7 @@ export async function POST(request: Request) {
 
   // Orphan on failure is acceptable — the new avatar still shows (profile.md §5).
   if (current?.avatarPublicId && current.avatarPublicId !== publicId) {
-    await destroyImage(current.avatarPublicId).catch(() => {});
+    await destroyImage(current.avatarPublicId).catch((err) => logServerError("avatar:destroy-previous", err));
   }
 
   return NextResponse.json({ avatarPublicId: publicId, avatarUrl: avatarUrl(publicId) });
@@ -119,7 +125,7 @@ export async function DELETE() {
   // (a sweepable orphan), not a row pointing at a deleted asset — that would be
   // a permanently broken image no cleanup job can fix.
   await db.update(user).set({ avatarPublicId: null, updatedAt: new Date() }).where(eq(user.id, userId));
-  await destroyImage(current.avatarPublicId).catch(() => {});
+  await destroyImage(current.avatarPublicId).catch((err) => logServerError("avatar:destroy-on-remove", err));
 
   return NextResponse.json({ avatarPublicId: null, avatarUrl: null });
 }

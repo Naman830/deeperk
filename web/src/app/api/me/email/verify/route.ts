@@ -9,6 +9,7 @@ import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { otpSchema } from "@/lib/validation/signup";
 import { sendEmailChangedNoticeEmail } from "@/lib/integrations/resend";
+import { logServerError } from "@/lib/log";
 
 const MAX_ATTEMPTS = 3;
 const EMAIL_CHANGE_VERIFY_LIMIT = { windowSeconds: 60 * 60, max: 10 }; // 10/hour/user
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
   await auth.api.revokeOtherSessions({ headers: await headers() });
 
   // Best-effort — a failed notice email shouldn't undo an otherwise-successful change.
-  await sendEmailChangedNoticeEmail(oldEmail, newEmail).catch(() => {});
+  await sendEmailChangedNoticeEmail(oldEmail, newEmail).catch((err) => logServerError("email-change:notice", err));
 
   return NextResponse.json({ success: true, email: newEmail });
 }

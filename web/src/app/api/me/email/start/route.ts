@@ -10,6 +10,7 @@ import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { emailSchema } from "@/lib/validation/signup";
 import { sendEmailChangeOtpEmail } from "@/lib/integrations/resend";
+import { logServerError } from "@/lib/log";
 
 const OTP_TTL_SECONDS = 5 * 60;
 const CONFIRM_PASSWORD_LIMIT = { windowSeconds: 15 * 60, max: 5 }; // 5/15min/user, shared "confirm-password gate"
@@ -77,7 +78,8 @@ export async function POST(request: Request) {
     // no leak while delivery is healthy.
     try {
       await sendEmailChangeOtpEmail(newEmail, otp);
-    } catch {
+    } catch (err) {
+      logServerError("email-change:send-otp", err);
       await db.delete(pendingContactChange).where(and(eq(pendingContactChange.userId, userId), eq(pendingContactChange.type, "EMAIL")));
       return NextResponse.json({ error: "Couldn't send the code. Please try again." }, { status: 502 });
     }

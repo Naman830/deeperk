@@ -8,6 +8,7 @@ import { emailSchema } from "@/lib/validation/signup";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sendSignupOtpEmail } from "@/lib/integrations/resend";
 import { auth } from "@/lib/auth/server";
+import { logServerError } from "@/lib/log";
 
 const OTP_TTL_SECONDS = 5 * 60;
 const EMAIL_RATE_LIMIT = { windowSeconds: 60 * 60, max: 5 }; // 5/hr per email
@@ -61,7 +62,8 @@ export async function POST(request: Request) {
   // inbox" for a code that was never sent. Drop the row so a retry starts clean.
   try {
     await sendSignupOtpEmail(email, otp);
-  } catch {
+  } catch (err) {
+    logServerError("signup:send-otp", err);
     await db.delete(pendingRegistration).where(eq(pendingRegistration.email, email));
     return NextResponse.json({ error: "Couldn't send the code. Please try again." }, { status: 502 });
   }
