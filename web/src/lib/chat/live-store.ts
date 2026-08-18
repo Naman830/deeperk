@@ -135,20 +135,9 @@ export function markLiveMessageDeleted(conversationId: string, messageId: string
  * Two-step, and the delay is the whole point — see exitingIds above.
  *
  * Step one marks the message as leaving and re-renders, so the bubble picks up
- * its collapse transition. Step two, EXIT_MS later, actually hides it. A caller
- * that wants the old instant behaviour passes `animate: false`, which is what
- * the reconnect/backfill paths do: animating a hide the user never saw is just
- * a delay before showing them the truth.
+ * its collapse transition. Step two, EXIT_MS later, actually hides it.
  */
-export function markLiveMessageHidden(
-  conversationId: string,
-  messageId: string,
-  options: { animate?: boolean } = {},
-): void {
-  if (options.animate === false) {
-    commitHidden(conversationId, messageId);
-    return;
-  }
+export function markLiveMessageHidden(conversationId: string, messageId: string): void {
   // A new Set every time, never a mutation: useSyncExternalStore compares
   // snapshots by identity, so mutating in place would change nothing on screen.
   const exiting = new Set(exitingIds.get(conversationId) ?? []);

@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import type { SendableMessageType } from "./types";
 
 /**
@@ -55,33 +55,4 @@ function sign(body: string, secret: string): string {
 export function signMediaToken(payload: MediaTokenPayload): string {
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${body}.${sign(body, getSecret())}`;
-}
-
-/** Returns null for any malformed, mis-signed or expired token. */
-export function verifyMediaToken(token: unknown): MediaTokenPayload | null {
-  if (typeof token !== "string") return null;
-  const dot = token.lastIndexOf(".");
-  if (dot <= 0) return null;
-
-  const body = token.slice(0, dot);
-  const signature = token.slice(dot + 1);
-
-  let expected: string;
-  try {
-    expected = sign(body, getSecret());
-  } catch {
-    return null;
-  }
-
-  const given = Buffer.from(signature);
-  const want = Buffer.from(expected);
-  if (given.length !== want.length || !timingSafeEqual(given, want)) return null;
-
-  try {
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as MediaTokenPayload;
-    if (typeof payload.exp !== "number" || payload.exp < Date.now()) return null;
-    return payload;
-  } catch {
-    return null;
-  }
 }

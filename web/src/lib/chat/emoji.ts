@@ -42,6 +42,3 @@ export const EMOJI_GROUPS: { label: string; emoji: string[] }[] = [
     ],
   },
 ];
-
-/** Flat list, for the composer's emoji button. */
-export const ALL_EMOJI: string[] = EMOJI_GROUPS.flatMap((group) => group.emoji);
