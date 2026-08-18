@@ -157,7 +157,13 @@ New tables, all in `db/schema/chat/`, following the same `text("id").primaryKey(
 
 Indexes that matter: `(conversationId, createdAt)` on `message` — every chat open runs "newest 30 in conversation X"; `(userId)` on `conversation_member` — "list all my chats." Both called out explicitly because README §6 flags them as the ones that turn a 1ms query into a full table scan if forgotten.
 
-**Unread counts** come from `lastReadAt`, not a per-message read-receipt table — same trade-off as README §6, same honest cost: you get an unread *count*, not per-person "seen by" ticks in groups. Revisit only once Follow/Friend (profile.md §7) makes group social features worth the extra writes.
+**Unread counts** come from `lastReadAt`, not a per-message read-receipt table.
+
+**Read receipts are BUILT (2026-08-18), and still with no receipt table.** The original trade-off above assumed "count, not ticks" were the only two options. They are not: a second watermark, `conversation_member.lastDeliveredAt`, makes a message *delivered to X* iff `X.lastDeliveredAt >= message.createdAt`, and *read by X* the same way against `lastReadAt`. Two timestamps per member encode the state of every message they will ever receive, so per-message ticks and group "seen by" cost **zero rows per message** — the extra writes this section was avoiding never materialised.
+
+Two consequences worth knowing:
+- `conversation:read` now broadcasts to the conversation room (`conversation:read-by`) as well as to the reader's own tabs, which earlier versions of this doc explicitly ruled out.
+- Both broadcasts are gated server-side on the reader's `privacy_settings.onlineStatus`. A read timestamp is strictly more revealing than "online", so anyone who hides their presence emits neither. Decided on the server and never sent, per §2.6 — never sent and hidden by the client.
 
 **DM vs. group, one table:** a DIRECT conversation is a GROUP-shaped row with exactly 2 members and no name — chat rendering, sending, and history loading are written once, not twice. Directly reused from README §6.
 
@@ -218,11 +224,13 @@ No Web Push (needs a service worker + VAPID + permission prompt) — README §13
 
 **Friend/Follow-gated messaging.** The whole point of designing this as "open DMs, one gate check away from friend-gated" — see the top of this doc and `profile.md` §7. When Follow ships, `startConversation` gains one check; nothing else here changes.
 
-**Block & mute.** Called out in §5 as the actual near-term priority — an open-DM/open-group-add model without it is the one real gap in this design.
+**~~Block & mute.~~ BUILT (2026-08-18).** A `block` table in the new `db/schema/social/` domain, checked in both directions at every gate: DM creation, `message:send` (DIRECT only — one member blocking another must not break a group for everybody), group member-add, and people search. Every gate answers exactly what it would answer for a user who does not exist; none of them says "you are blocked", which would turn the block into a notification. Mute is `conversation_member.mutedUntil`, a timestamp rather than a boolean so "mute for 8 hours" is expressible.
 
-**Message reactions & editing.** Explicitly out of scope per README §1 — "not core to learning," easy to bolt on later (`message.editedAt`, a `reaction` table keyed on `(messageId, userId, emoji)`).
+**Message editing — BUILT (2026-08-18).** `message.editedAt`, as this line proposed. TEXT-only, own-messages-only, no time limit, and deliberately does **not** bump `conversation.updatedAt` — an edit to a week-old message must not jump the conversation to the top of everyone's sidebar.
 
-**Per-person read receipts.** Deferred with unread counts (§4) — worth it once groups have enough social weight to want "seen by" ticks.
+**Message reactions — still not built on `main`.** Built and then deliberately deferred: the whole feature lives on the `feature/message-reactions` branch (a `reaction` table keyed on `(messageId, userId, emoji)`, `reaction:toggle`/`reaction:updated`, a store, a picker and the chips) and was removed from `main` because it isn't needed yet. Bring it back by diffing that branch rather than rebuilding it.
+
+**~~Per-person read receipts.~~ BUILT (2026-08-18)** — see §4, which now records how, and why it turned out to need no new table.
 
 **Full-text search over messages.** `ILIKE` is fine at this scale; Postgres `tsvector` + GIN is the documented upgrade (README §13.5), not needed yet.
 

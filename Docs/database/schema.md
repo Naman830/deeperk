@@ -311,7 +311,7 @@ Index: `idx_call_participant_user` on `user_id` alone — required for the busy-
 Per the confirmed decision to keep this pass limited to what's actually being built (see [`../../CLAUDE.md`](../../CLAUDE.md)):
 
 - **`follow`** (followers/following/friends graph) — described in `profile.md` and `chat.md` as planned, no feature doc yet.
-- **`reaction`** (message emoji reactions) — described in `chat.md` as planned.
+- **`reaction`** (message emoji reactions) — designed and built, then **deliberately kept off `main`**. The table lives on the `feature/message-reactions` branch: PK `(message_id, user_id, emoji)`, `message_id` CASCADE, `user_id` RESTRICT, no secondary index (the PK leads with `message_id`, which is the only query), `emoji` as plain `text` validated app-side per decision #2. Note the table **was** pushed to Neon before the feature was pulled, so an empty `reaction` table may still exist there — the next `drizzle-kit push` from `main` will drop it.
 - **`recent_search`** (search history) — described in `search.md` as planned.
 - **`privacy_settings.friendRequests`** and the `FRIENDS`/`FRIENDS_OF_FRIENDS` audience tiers — blocked on `follow` existing; the `text`-column choice in §4.2 means adding these later needs no schema migration, just a wider app-level allowed-values list.
 
