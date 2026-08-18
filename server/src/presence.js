@@ -57,7 +57,40 @@ function onlineUserIds() {
  * Mirrors presenceVisible() in web/src/lib/profile/privacy.ts. When a FRIENDS
  * tier lands, both have to change together and this becomes per-recipient.
  */
+/**
+ * readsPresencePublicly is now on the hot path — conversation:read consults it
+ * on every read event to decide whether a read receipt may be broadcast — so it
+ * gets a short TTL memo. Without one, marking a busy conversation read is a
+ * Neon round trip per event.
+ *
+ * 60s, not the socket's lifetime: turning presence off must actually stop the
+ * receipts, and a user who does that then waits a minute is a far better
+ * outcome than one whose setting is ignored until they reconnect.
+ */
+const PRESENCE_PRIVACY_TTL_MS = 60_000;
+const presencePrivacyCache = new Map();
+
 async function readsPresencePublicly(userId) {
+  const cached = presencePrivacyCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const value = await readPresencePrivacy(userId);
+  presencePrivacyCache.set(userId, { value, expiresAt: Date.now() + PRESENCE_PRIVACY_TTL_MS });
+  return value;
+}
+
+// Entries expire but are not removed on read, so without this the Map grows
+// forever keyed by every user who ever marked a conversation read. Same shape
+// as rate-limit.js's sweeper, including the unref so it can't hold the process
+// open during a shutdown.
+const presencePrivacySweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of presencePrivacyCache) {
+    if (entry.expiresAt <= now) presencePrivacyCache.delete(key);
+  }
+}, PRESENCE_PRIVACY_TTL_MS);
+presencePrivacySweeper.unref();
+
+async function readPresencePrivacy(userId) {
   const rows = await db
     .select({ onlineStatus: privacySettings.onlineStatus })
     .from(privacySettings)
