@@ -4,7 +4,6 @@ const { env } = require("./env");
 const {
   joinUsersToConversation,
   removeUsersFromConversation,
-  conversationRoom,
 } = require("./rooms");
 const notify = require("./handlers/notify");
 
@@ -129,4 +128,4 @@ function internalRouter(getIo) {
   return router;
 }
 
-module.exports = { internalRouter, conversationRoom };
+module.exports = { internalRouter };

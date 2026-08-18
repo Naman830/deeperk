@@ -73,7 +73,6 @@ function removeUsersFromConversation(io, userIds, conversationId) {
 module.exports = {
   userRoom,
   conversationRoom,
-  listConversationIds,
   joinInitialRooms,
   requireMembership,
   joinUsersToConversation,

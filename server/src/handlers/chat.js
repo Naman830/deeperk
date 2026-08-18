@@ -555,4 +555,4 @@ function registerChatHandlers(io, socket) {
   socket.on("typing:stop", relayTyping("typing:stop"));
 }
 
-module.exports = { registerChatHandlers, serialize };
+module.exports = { registerChatHandlers };

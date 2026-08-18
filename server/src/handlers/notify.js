@@ -27,10 +27,6 @@ function toConversationExceptSender(socket, conversationId, event, payload) {
   socket.to(conversationRoom(conversationId)).emit(event, payload);
 }
 
-function toUser(io, userId, event, payload) {
-  io.to(userRoom(userId)).emit(event, payload);
-}
-
 function toUsers(io, userIds, event, payload) {
   if (userIds.length === 0) return;
   io.to(userIds.map(userRoom)).emit(event, payload);
@@ -46,4 +42,4 @@ function presence(io, conversationIds, event, payload) {
   io.to(conversationIds.map(conversationRoom)).emit(event, payload);
 }
 
-module.exports = { toConversation, toConversationExceptSender, toUser, toUsers, presence };
+module.exports = { toConversation, toConversationExceptSender, toUsers, presence };

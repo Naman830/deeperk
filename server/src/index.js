@@ -13,7 +13,7 @@ const { Server } = require("socket.io");
 const { env } = require("./env");
 const { resolveHandshakeUser } = require("./auth");
 const presence = require("./presence");
-const { joinInitialRooms, listConversationIds } = require("./rooms");
+const { joinInitialRooms } = require("./rooms");
 const { registerChatHandlers } = require("./handlers/chat");
 const notify = require("./handlers/notify");
 const { internalRouter } = require("./internal");
@@ -215,5 +215,3 @@ process.on("unhandledRejection", (error) =>
     console.log(`[socket] allowed origins: ${env.WEB_ORIGINS.join(", ")}`);
   });
 })();
-
-module.exports = { app, io, listConversationIds };
