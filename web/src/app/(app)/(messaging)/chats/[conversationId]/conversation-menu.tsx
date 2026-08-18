@@ -33,7 +33,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { apiDelete, apiPost } from "@/lib/api-client";
+import { apiPost } from "@/lib/api-client";
 import { useNow, isMuted } from "@/lib/hooks/use-now";
 import type { ConversationDetail } from "@/lib/chat/types";
 import { useRealtime } from "../../../realtime-provider";
@@ -208,10 +208,4 @@ export function ConversationMenu({
       </AlertDialog>
     </>
   );
-}
-
-/** Exported so a profile page can undo a block without importing the dialog. */
-export async function unblockUser(username: string): Promise<string | null> {
-  const result = await apiDelete(`/api/users/${username}/block`);
-  return result.ok ? null : (result.data.error ?? "Couldn't unblock");
 }

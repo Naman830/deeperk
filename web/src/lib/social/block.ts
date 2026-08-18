@@ -27,15 +27,6 @@ export async function blockedBetween(a: string, b: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-/** Everyone this user has blocked, or been blocked by. Used to filter search. */
-export async function blockedUserIds(userId: string): Promise<string[]> {
-  const rows = await db
-    .select({ blockerId: block.blockerId, blockedId: block.blockedId })
-    .from(block)
-    .where(or(eq(block.blockerId, userId), eq(block.blockedId, userId)));
-  return rows.map((row) => (row.blockerId === userId ? row.blockedId : row.blockerId));
-}
-
 /**
  * SQL predicate form of blockedBetween, for queries that already select over
  * `user` and must simply not return blocked people (search, group-add).
