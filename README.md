@@ -52,12 +52,13 @@ Not part of any API surface — both need a scheduler, and none is chosen yet. N
 - [x] Profile (app shell, `/settings/*`, `/u/[username]`)
 - [x] Search (in the chats column + standalone `/search`)
 - [x] UX pass (collapsible rail persisted across reloads, mobile fixes, loading/error/404 boundaries, one error channel)
-- [ ] Chat
+- [x] Chat
 - [ ] Call
 
 ### 4. Verify
 
 - [x] Auth / Profile / Search verified end-to-end against the real Neon DB and a running `next dev` (66 API checks + 21 page-render checks). See CLAUDE.md → "End-to-end verification pass".
 - [x] **Cloudinary API key works** (re-verified 2026-08-17). `ping()`, `usage()`, and a real upload + destroy all succeed for both `image` and `raw` resource types. The earlier `actions=["create"]` 403 is gone, so nothing is blocked on credentials.
+- [x] **Chat verified end-to-end — and the harness is now permanent** (2026-08-18). `tests/` is a checked-in Vitest suite (11 files, ~133 assertions: every REST route, every socket event, the internal event bridge, pages) run with `npm test` against `npm run dev` + the real Neon DB; see `tests/README.md`. It found and pinned one real server bug (sends emitted right after `session:ready` were silently dropped) and the unread-divider misplacement.
 - [ ] **Set `TRUSTED_PROXIES`** before deploying, or every IP-keyed rate limit is bypassable via a client-supplied `x-forwarded-for`.
-- [ ] Chat / Call verification (once built)
+- [ ] Call verification (once built)
