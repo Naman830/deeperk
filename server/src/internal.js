@@ -109,6 +109,16 @@ function internalRouter(getIo) {
         }
         break;
       }
+      // One member's own view of a conversation changed (pin / mute / archive /
+      // clear / delete). Their own tabs only — routing it to the conversation
+      // room would tell the other members that you muted or deleted the chat.
+      case "conversation.self-changed": {
+        if (typeof event.userId === "string") {
+          notify.toUsers(io, [event.userId], "conversation:self-changed", { conversationId });
+        }
+        break;
+      }
+
       default:
         return res.status(400).json({ error: "Unknown event kind" });
     }
