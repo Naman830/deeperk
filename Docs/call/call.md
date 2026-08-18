@@ -177,7 +177,7 @@ Extends chat.md §3's `server/src/` layout with one new handler and one new in-m
 ```
 server/src/
 ├── index.js
-├── auth.js
+├── socket/              (auth.js, create-io.js, connection.js, session-sweep.js)
 ├── presence.js
 ├── active-calls.js     ← Map<userId, callId> — powers the busy check in §2.1, same
 │                          single-server assumption as presence.js

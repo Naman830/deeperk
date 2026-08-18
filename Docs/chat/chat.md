@@ -1,6 +1,6 @@
 # Chat — Direct Messages & Groups on ChatSphere
 
-Picks up after [`profile.md`](./profile.md). This is the first thing built on the **second server** — `server/` currently holds nothing but an Express "Hello World" on port 5000; this doc is the spec for turning it into the Socket.IO real-time server described in the root [`README.md`](../../README.md) §4, on port 4000.
+Picks up after [`profile.md`](./profile.md). This is the first thing built on the **second server** — `server/`, the Socket.IO real-time server described in the root [`README.md`](../../README.md) §4, on port 4000.
 
 **Messaging model: open DMs.** Per `profile.md` §"No relationship graph yet," there is no Follow/Friend system built. Any user can message any other user directly — no request, no acceptance step. `privacy_settings.friendRequests` and the `FRIENDS` / `FRIENDS_OF_FRIENDS` audience tiers already exist as columns (`db/schema/auth/index.js` → `privacy-settings.js`) but are inert until a relationship graph exists (`profile.md` §7) — chat treats them as `EVERYONE` for now. When Follow/Friend ships, the upgrade is a single new gate check in `startConversation`, nothing in this doc's data model changes.
 
@@ -133,15 +133,26 @@ Pick file → client-side size/type check (courtesy only)
 
 ```
 server/src/
-├── index.js          ← boots Express + Socket.IO on SOCKET_PORT (4000, not the current placeholder 5000)
-├── auth.js            ← the handshake in §2.1 — verifies the session cookie once per connection
-├── presence.js         ← the online-users Map (§2.6)
+├── index.js            ← entrypoint: Express app + /healthz, http.Server, wiring, shutdown
+├── env.js              ← config, validated first (db/ reads DATABASE_URL at module load)
+├── db.js               ← the one require("../../db") bridge to the shared schema
+├── rooms.js            ← room naming + membership (the authorization primitive)
+├── presence.js         ← online-users Map, privacy memo, is_online/last_seen writes (§2.6)
+├── rate-limit.js       ← in-memory fixed-window limiter + LIMITS table (§7)
+├── media-token.js      ← HMAC verifier, mirrors web/src/lib/chat/media-token.ts (§8)
+├── socket/
+│   ├── auth.js         ← the handshake in §2.1 — verifies the session cookie once per connection
+│   ├── create-io.js    ← Server options, CORS/allowRequest, handshake middleware
+│   ├── connection.js   ← connection/disconnecting lifecycle
+│   └── session-sweep.js← 5-minute session revalidation
+├── http/
+│   └── internal.js     ← POST /internal/events, the Next → socket bridge (§2.1)
 └── handlers/
-    ├── chat.js          ← message:send, typing:start/stop, conversation:read
+    ├── chat.js          ← message:send/delete/delete-for-me/edit, receipts, typing
     └── notify.js         ← fan-out for toasts/badges (§6)
 ```
 
-`server/src/index.js` today is a bare `Hello World` on port 5000 (leftover scaffold) — this is the first real feature built on it. CORS on the Socket.IO server is locked to the web app's origin only, per README §12's production checklist.
+CORS on the Socket.IO server is locked to the web app's origin only, per README §12's production checklist.
 
 ---
 
