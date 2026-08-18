@@ -28,7 +28,15 @@ Tick a task off below when it's done, and update `CLAUDE.md` with any decision m
 - [x] Auth (signup OTP flow, login, forgot-password — Better Auth)
 - [x] Profile (fields, privacy, public view, username + 30-day hold, email change, delete, avatar)
 - [x] Search (`GET /api/users/search`)
-- [ ] Chat (REST + Socket.IO)
+- [x] Chat (REST + Socket.IO)
+- [x] Chat UX expansion — all 4 phases built (see `CLAUDE.md` for the decisions).
+      Phase 1: delete-for-me, three-way delete dialog, long-press/right-click menu, mobile
+      bubble sizing. Phase 2: reply, edit, forward, copy, multi-select, autolinking.
+      Phase 3: read receipts, unread divider, toast rework, Settings → Notifications.
+      Phase 4: pin/mute/archive/block, clear & delete chat, in-chat search, image reflow fix.
+      Plus @mentions in groups and a per-chat media gallery. Schema is pushed and verified.
+      Message reactions were built and then deliberately held back — they live on the
+      `feature/message-reactions` branch, not on `main`.
 - [ ] Call signaling (Socket.IO, `server/`)
 
 ### Deferred background jobs
