@@ -1,4 +1,5 @@
 const { resolveHandshakeUser } = require("./auth");
+const { userRoom } = require("../rooms");
 const presence = require("../presence");
 
 const SESSION_RECHECK_MS = 5 * 60 * 1000;
@@ -15,7 +16,7 @@ const SESSION_RECHECK_MS = 5 * 60 * 1000;
 function startSessionSweep(io) {
   const interval = setInterval(async () => {
     for (const userId of presence.onlineUserIds()) {
-      const sockets = await io.in(`user:${userId}`).fetchSockets();
+      const sockets = await io.in(userRoom(userId)).fetchSockets();
       const probe = sockets[0];
       if (!probe) continue;
       const result = await resolveHandshakeUser(probe.handshake).catch(() => ({
@@ -25,7 +26,7 @@ function startSessionSweep(io) {
         console.log(
           `[socket] session no longer valid for ${userId} — disconnecting`,
         );
-        io.in(`user:${userId}`).disconnectSockets(true);
+        io.in(userRoom(userId)).disconnectSockets(true);
       }
     }
   }, SESSION_RECHECK_MS);

@@ -47,7 +47,7 @@ function registerConnectionHandlers(io, bootId) {
       // A client that dies mid-keystroke otherwise leaves a permanent
       // "X is typing…" in everyone else's UI.
       for (const conversationId of ids) {
-        socket.to(`conversation:${conversationId}`).emit("typing:stop", {
+        notify.toConversationExceptSender(socket, conversationId, "typing:stop", {
           conversationId,
           userId,
           username: socket.data.user.username,
