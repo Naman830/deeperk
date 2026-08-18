@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import { SearchX, Timer } from "lucide-react";
 import { useUserSearch, MIN_SEARCH_LENGTH, type SearchResult } from "@/lib/hooks/use-user-search";

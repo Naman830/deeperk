@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 

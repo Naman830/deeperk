@@ -1,5 +1,3 @@
-"use client";
-
 import { useId, useState } from "react";
 import { Check, Circle, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";

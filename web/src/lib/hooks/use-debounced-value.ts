@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 
 // Delays reflecting `value` until it's stayed unchanged for `delayMs` — used
