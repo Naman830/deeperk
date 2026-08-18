@@ -10,14 +10,13 @@ const { randomUUID } = require("node:crypto");
 const express = require("express");
 
 const { env } = require("./env");
-const { resolveHandshakeUser } = require("./socket/auth");
 const { createIo } = require("./socket/create-io");
 const { registerConnectionHandlers } = require("./socket/connection");
+const { startSessionSweep } = require("./socket/session-sweep");
 const presence = require("./presence");
 const { internalRouter } = require("./http/internal");
 
 const BOOT_ID = randomUUID();
-const SESSION_RECHECK_MS = 5 * 60 * 1000;
 
 const app = express();
 app.disable("x-powered-by");
@@ -44,30 +43,7 @@ io = createIo(httpServer);
 
 registerConnectionHandlers(io, BOOT_ID);
 
-/**
- * Sessions are checked once, at connect, and the socket stays trusted for the
- * life of the TCP connection — so signing out, resetting a password
- * (revokeSessionsOnPasswordReset) or changing an email (revokeOtherSessions)
- * would otherwise leave a live socket happily sending and receiving. One sweep
- * per distinct connected user, not per socket.
- */
-const revalidation = setInterval(async () => {
-  for (const userId of presence.onlineUserIds()) {
-    const sockets = await io.in(`user:${userId}`).fetchSockets();
-    const probe = sockets[0];
-    if (!probe) continue;
-    const result = await resolveHandshakeUser(probe.handshake).catch(() => ({
-      error: true,
-    }));
-    if (result.error) {
-      console.log(
-        `[socket] session no longer valid for ${userId} — disconnecting`,
-      );
-      io.in(`user:${userId}`).disconnectSockets(true);
-    }
-  }
-}, SESSION_RECHECK_MS);
-revalidation.unref();
+const revalidation = startSessionSweep(io);
 
 let shuttingDown = false;
 async function shutdown() {
