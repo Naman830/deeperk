@@ -6,6 +6,7 @@ import { conversation, conversationMember, message, user, privacySettings } from
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { discoverableFilter } from "@/lib/profile/privacy";
+import { notBlockedWith } from "@/lib/social/block";
 import { addMembersSchema, GROUP_MAX_MEMBERS } from "@/lib/validation/chat";
 import { getMembership, canManageGroup } from "@/lib/chat/membership";
 import { notifySocket } from "@/lib/chat/notify-socket";
@@ -65,6 +66,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           isNull(user.deactivatedAt),
           isNull(user.deletionScheduledAt),
           discoverableFilter(),
+          // You can't be added to a group by someone you blocked, or by someone
+          // who blocked you. Dropped silently along with the other rejected
+          // candidates below, so this stays out of the oracle.
+          notBlockedWith(userId),
         ),
       ),
   ]);

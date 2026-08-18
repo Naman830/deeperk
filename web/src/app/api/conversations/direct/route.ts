@@ -3,6 +3,7 @@ import { and, eq, isNull } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { conversation, conversationMember, user, privacySettings } from "../../../../../../db/schema";
 import { getSession } from "@/lib/auth/session";
+import { blockedBetween } from "@/lib/social/block";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { startDirectSchema } from "@/lib/validation/chat";
 import { directKey } from "@/lib/chat/direct-key";
@@ -48,6 +49,15 @@ export async function POST(request: Request) {
 
   if (!target) return NextResponse.json(NOT_FOUND, { status: 404 });
   if (target.id === userId) return NextResponse.json({ error: "You can't message yourself" }, { status: 400 });
+
+  // Block gate, in BOTH directions, and before the existing-conversation lookup
+  // rather than after it — otherwise blocking someone you already had a DM with
+  // would still hand you a working conversation id.
+  //
+  // Answers the same NOT_FOUND as an unknown handle. Saying "you are blocked"
+  // would turn the block into a notification, which is information the blocker
+  // never agreed to share.
+  if (await blockedBetween(userId, target.id)) return NextResponse.json(NOT_FOUND, { status: 404 });
 
   const key = directKey(userId, target.id);
 
