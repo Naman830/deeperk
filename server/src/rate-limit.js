@@ -50,6 +50,16 @@ const LIMITS = {
   // UPDATE, and idempotent is not free.
   read: { windowMs: 10_000, max: 20 },
   delete: { windowMs: 60_000, max: 20 },
+  // Hiding a message writes one tiny row and is visible to nobody else, so
+  // it is looser than delete-for-everyone. Higher than it looks because
+  // multi-select fires one of these per selected message.
+  deleteForMe: { windowMs: 60_000, max: 60 },
+  // An UPDATE of one row, own messages only. Generous because a typo fixed
+  // three times in a row is normal behaviour, not abuse.
+  edit: { windowMs: 60_000, max: 30 },
+  // Emitted by the recipient once per incoming message, so it tracks the send
+  // limit rather than the read limit. Same runaway-client guard as `read`.
+  delivered: { windowMs: 10_000, max: 30 },
 };
 
 module.exports = { allow, LIMITS };
