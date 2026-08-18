@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { DeleteScope } from "../../../realtime-provider";
 
-// No "use client": rendered from message-bubble.tsx.
+// No "use client": rendered from message-bubble.tsx (single delete) and
+// chat-thread.tsx (bulk selection delete), both inside the thread's boundary.
 
 /**
  * WhatsApp's three-way delete: for me / for everyone / cancel.

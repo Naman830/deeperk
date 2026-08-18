@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ChatMessage } from "@/lib/chat/types";
 
-// No "use client": rendered from thread-header.tsx.
+// No "use client": rendered from chat-thread.tsx, inside its client boundary.
 
 /**
  * "Media, links & files" — every photo, video and file in this conversation.
