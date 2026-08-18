@@ -15,15 +15,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { resetSocket } from "@/lib/realtime/socket";
+import { useRealtime } from "./realtime-provider";
 import { persistRailState } from "./rail-cookie";
 
 const NAV = [
   // /u/* is reached from the chats column's search, and /search is the same
   // feature on its own route, so both keep Chats lit.
-  { href: "/chats", label: "Chats", icon: MessageCircle, match: ["/chats", "/u/", "/search"] },
-  { href: "/calls", label: "Calls", icon: Phone, match: ["/calls"] },
-  { href: "/settings", label: "Settings", icon: Settings, match: ["/settings"] },
+  { href: "/chats", label: "Chats", icon: MessageCircle, match: ["/chats", "/u/", "/search"], unread: true },
+  { href: "/calls", label: "Calls", icon: Phone, match: ["/calls"], unread: false },
+  { href: "/settings", label: "Settings", icon: Settings, match: ["/settings"], unread: false },
 ];
 
 type AppRailProps = {
@@ -39,6 +42,7 @@ export function AppRail({ defaultCollapsed, username, displayUsername, firstName
   const pathname = usePathname();
   const router = useRouter();
   const navId = useId();
+  const { unreadTotal } = useRealtime();
   // Seeded from the server-rendered value, so the first client render matches the
   // markup exactly — no hydration mismatch and no width flash.
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -66,6 +70,10 @@ export function AppRail({ defaultCollapsed, username, displayUsername, firstName
   }, []);
 
   async function handleSignOut() {
+    // The socket authenticates once at connect and stays trusted for the life
+    // of the connection, so it has to be torn down here — otherwise the next
+    // user in this tab inherits it.
+    resetSocket();
     await signOut();
     router.replace("/login");
     router.refresh();
@@ -105,8 +113,9 @@ export function AppRail({ defaultCollapsed, username, displayUsername, firstName
       </div>
 
       <div className="contents md:flex md:flex-col md:gap-1">
-        {NAV.map(({ href, label, icon: Icon, match }) => {
+        {NAV.map(({ href, label, icon: Icon, match, unread }) => {
           const active = match.some((prefix) => pathname.startsWith(prefix));
+          const showCount = unread && unreadTotal > 0;
           const link = (
             <Link
               key={href}
@@ -114,7 +123,7 @@ export function AppRail({ defaultCollapsed, username, displayUsername, firstName
               aria-current={active ? "page" : undefined}
               aria-label={collapsed ? label : undefined}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors md:flex-row md:gap-3 md:text-sm",
+                "relative flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors md:flex-row md:gap-3 md:text-sm",
                 collapsed && "md:justify-center md:px-0",
                 active
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -123,6 +132,29 @@ export function AppRail({ defaultCollapsed, username, displayUsername, firstName
             >
               <Icon size={20} className="shrink-0" />
               <span className={cn("whitespace-nowrap", collapsed && "md:hidden")}>{label}</span>
+              {/* The count when there's room for it; a dot when the label is
+                  hidden (collapsed rail, and the mobile tab bar). One accessible
+                  name between them, so it isn't announced twice. */}
+              {showCount && (
+                <Badge
+                  aria-label={`${unreadTotal} unread`}
+                  className={cn(
+                    "ml-auto hidden h-4 min-w-4 px-1 text-[10px] tabular-nums md:flex",
+                    collapsed && "md:hidden",
+                  )}
+                >
+                  {unreadTotal > 99 ? "99+" : unreadTotal}
+                </Badge>
+              )}
+              {showCount && (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "bg-primary ring-sidebar absolute top-1 right-2 size-2 rounded-full ring-2 md:hidden",
+                    collapsed && "md:block md:top-1.5 md:right-3",
+                  )}
+                />
+              )}
             </Link>
           );
 

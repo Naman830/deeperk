@@ -7,6 +7,7 @@ import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { AVATAR_RULES } from "@/lib/validation/profile";
 import { uploadImage, destroyImage, CloudinaryNotConfiguredError, AVATAR_FOLDER } from "@/lib/integrations/cloudinary";
+import { sniffAvatarImage } from "@/lib/media/sniff";
 import { avatarUrl } from "@/lib/avatar-url";
 import { logServerError } from "@/lib/log";
 
@@ -14,19 +15,6 @@ export const runtime = "nodejs"; // sharp and the Cloudinary SDK need Node APIs
 
 const UPLOAD_LIMIT = { windowSeconds: 60 * 60, max: 10 }; // 10/hour/user (Docs/user/profile.md §6)
 const ENVELOPE_SLACK = 64 * 1024; // multipart boundary + headers on top of the file
-
-// Real format is read from the bytes, never the filename or the client's MIME.
-// This runs BEFORE sharp is constructed: sharp's bundled libvips includes
-// librsvg, so checking the allowlist only after metadata() would mean
-// attacker-controlled XML had already been parsed. Sniffing first keeps SVG,
-// PDF, TIFF and HEIF bytes away from any loader at all.
-function sniffImageFormat(buffer: Buffer): boolean {
-  if (buffer.length < 12) return false;
-  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-  const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-  const isWebp = buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
-  return isJpeg || isPng || isWebp;
-}
 
 // Avatar upload (Docs/user/profile.md §2 Avatar Upload, §4, §5, §6).
 export async function POST(request: Request) {
@@ -56,7 +44,9 @@ export async function POST(request: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  if (!sniffImageFormat(buffer)) {
+  // Shared with chat media (lib/media/sniff.ts), but the avatar allowlist stays
+  // narrower — widening chat's must never widen this one.
+  if (!sniffAvatarImage(buffer)) {
     return NextResponse.json({ error: "Image must be a JPG, PNG, or WebP" }, { status: 400 });
   }
 

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { MessagesSquare } from "lucide-react";
 import { ListColumn } from "@/components/features/shell/list-column";
 import { UserSearchResults, MIN_SEARCH_LENGTH } from "@/components/features/search/user-search-results";
 import { UserSearchInput } from "@/components/features/search/user-search-input";
-import { EmptyState } from "@/components/features/shell/empty-state";
+import { ConversationList } from "./conversation-list";
+import { NewGroupButton } from "./new-group-button";
 
 // The sketch's middle column: a search field above the conversation list. Typing
 // 2+ characters swaps the list for people search (Docs/user/search.md), so
@@ -17,17 +17,10 @@ export function ConversationColumn() {
   return (
     <ListColumn
       title="Chats"
+      action={<NewGroupButton />}
       toolbar={<UserSearchInput value={query} onChange={setQuery} />}
     >
-      {searching ? (
-        <UserSearchResults query={query} />
-      ) : (
-        <EmptyState
-          icon={<MessagesSquare size={28} />}
-          title="No conversations yet"
-          description="Search for someone by username to start chatting."
-        />
-      )}
+      {searching ? <UserSearchResults query={query} /> : <ConversationList />}
     </ListColumn>
   );
 }

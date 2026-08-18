@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, ilike, isNull, ne, or } from "@/lib/db/drizzle-ops";
+import { and, asc, eq, ilike, isNull, ne } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { user, privacySettings } from "../../../../../../db/schema";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { discoverableFilter } from "@/lib/profile/privacy";
 import { avatarUrl } from "@/lib/avatar-url";
 import { searchQuerySchema, escapeLikePattern, SEARCH_RESULT_LIMIT } from "@/lib/validation/search";
 
@@ -44,8 +45,8 @@ export async function GET(request: Request) {
         ne(user.id, userId),
         isNull(user.deactivatedAt),
         isNull(user.deletionScheduledAt),
-        // No privacy_settings row means EVERYONE, same as the column default.
-        or(isNull(privacySettings.discoverable), eq(privacySettings.discoverable, "EVERYONE")),
+        // Shared with chat's DM/group gates so the three can't drift.
+        discoverableFilter(),
       ),
     )
     .orderBy(asc(user.username))

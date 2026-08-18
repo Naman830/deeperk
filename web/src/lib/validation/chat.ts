@@ -1,0 +1,115 @@
+import { z } from "zod";
+
+// Chat rules per Docs/chat/chat.md §2.3, §2.4, §7, §8. Shared between the
+// client (inline feedback before a bubble is ever created) and the server /
+// socket handlers, which never trust that the client-side check ran.
+
+export const MESSAGE_MAX_LENGTH = 4000;
+
+// Trimmed, because a message of only whitespace is an empty message. The
+// client blocks over-length before sending so §8's "rejected, inline error"
+// never has to arrive after an optimistic bubble already exists.
+export const messageBodySchema = z
+  .string()
+  .trim()
+  .min(1, "Type a message")
+  .max(MESSAGE_MAX_LENGTH, `Messages can be up to ${MESSAGE_MAX_LENGTH} characters`);
+
+export const GROUP_NAME_MAX = 50;
+export const GROUP_MIN_MEMBERS = 2; // including the creator
+export const GROUP_MAX_MEMBERS = 20;
+
+export const groupNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Give the group a name")
+  .max(GROUP_NAME_MAX, `Group name must be ${GROUP_NAME_MAX} characters or fewer`);
+
+// Usernames, not ids: no user id is exposed to the browser anywhere in this
+// app (search returns handles, getPublicProfile strips `id`), so the server
+// resolves them in the same lookup it already needs for the discoverable gate.
+const usernameRef = z.string().trim().toLowerCase().min(3).max(30);
+
+export const startDirectSchema = z.object({
+  username: usernameRef,
+});
+
+export const createGroupSchema = z.object({
+  name: groupNameSchema,
+  // The creator is added server-side, so the payload carries everyone else.
+  memberUsernames: z
+    .array(usernameRef)
+    .min(GROUP_MIN_MEMBERS - 1, "Add at least one other person")
+    .max(GROUP_MAX_MEMBERS - 1, `A group can have up to ${GROUP_MAX_MEMBERS} members`),
+});
+
+export const renameGroupSchema = z.object({
+  name: groupNameSchema,
+});
+
+export const addMembersSchema = z.object({
+  usernames: z
+    .array(usernameRef)
+    .min(1, "Pick someone to add")
+    .max(GROUP_MAX_MEMBERS - 1, `A group can have up to ${GROUP_MAX_MEMBERS} members`),
+});
+
+// OWNER is transferred, never assigned — see the members route.
+export const memberRoleSchema = z.enum(["ADMIN", "MEMBER"]);
+
+export const updateMemberRoleSchema = z.object({
+  role: memberRoleSchema,
+});
+
+export type StartDirectInput = z.infer<typeof startDirectSchema>;
+export type CreateGroupInput = z.infer<typeof createGroupSchema>;
+export type AddMembersInput = z.infer<typeof addMembersSchema>;
+
+// Media caps per chat.md §8. `mimes` is a courtesy list for the file picker's
+// `accept` attribute and the client-side pre-check only — the server decides
+// from magic bytes (lib/media/sniff.ts), never from the declared type.
+export const MEDIA_RULES = {
+  image: {
+    maxBytes: 5 * 1024 * 1024,
+    mimes: ["image/jpeg", "image/png", "image/webp"],
+  },
+  video: {
+    maxBytes: 20 * 1024 * 1024,
+    mimes: ["video/mp4", "video/webm", "video/quicktime"],
+  },
+  file: {
+    maxBytes: 10 * 1024 * 1024,
+    mimes: ["application/pdf", "application/zip"],
+  },
+} as const;
+
+export type MediaKind = keyof typeof MEDIA_RULES;
+
+/** Largest cap across kinds — the cheap `content-length` precheck before any parsing. */
+export const MEDIA_MAX_BYTES = Math.max(...Object.values(MEDIA_RULES).map((rule) => rule.maxBytes));
+
+export const HISTORY_PAGE_SIZE = 30;
+export const HISTORY_MAX_PAGE_SIZE = 50;
+
+/**
+ * Keyset cursor: "<epochMillis>.<messageId>".
+ *
+ * The tuple, not createdAt alone — statements inside one db.batch() share a
+ * transaction and get an identical now(), so ties are real (a group's SYSTEM
+ * message and its first real message can collide exactly). A bad cursor must
+ * be a 400, not a silent fall back to page 1, which reads to the client as
+ * "here's more" forever and loops the infinite scroll.
+ */
+export function parseMessageCursor(raw: string | null): { createdAt: Date; id: string } | null | "invalid" {
+  if (raw === null || raw === "") return null;
+  const separator = raw.indexOf(".");
+  if (separator <= 0) return "invalid";
+  const millis = Number(raw.slice(0, separator));
+  const id = raw.slice(separator + 1);
+  if (!Number.isSafeInteger(millis) || millis <= 0 || !id) return "invalid";
+  return { createdAt: new Date(millis), id };
+}
+
+export function formatMessageCursor(createdAt: Date, id: string): string {
+  return `${createdAt.getTime()}.${id}`;
+}

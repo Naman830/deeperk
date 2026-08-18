@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
 import { user, socialLink, privacySettings } from "../../../../db/schema";
+import { presenceVisible } from "@/lib/profile/privacy";
 import { avatarUrl } from "@/lib/avatar-url";
 
 export type PublicSocialLink = { id: string; platform: string; url: string };
@@ -56,7 +57,8 @@ export async function getPublicProfile(username: string, viewerId: string): Prom
   const isOwner = row.id === viewerId;
   // No privacy_settings row yet defaults to EVERYONE, same as the columns' DB default.
   const showDetails = isOwner || (row.profileDetails ?? "EVERYONE") === "EVERYONE";
-  const showOnlineStatus = isOwner || (row.onlineStatus ?? "EVERYONE") === "EVERYONE";
+  // Shared with the conversation list and the socket server's presence gate.
+  const showOnlineStatus = presenceVisible(row.onlineStatus, isOwner);
 
   const profile: PublicProfile = {
     username: row.username,

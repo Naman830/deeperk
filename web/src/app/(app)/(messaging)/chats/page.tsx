@@ -5,14 +5,15 @@ import { EmptyState } from "@/components/features/shell/empty-state";
 
 export const metadata: Metadata = { title: "Chats" };
 
-// Placeholder until the Chat API exists (Docs/chat/chat.md — not built).
+// The desktop no-selection pane. Below md, ShellColumns hides this entirely and
+// shows the conversation list instead, so this copy is desktop-only in practice.
 export default function ChatsPage() {
   return (
     <MainPane centered>
       <EmptyState
         icon={<MessagesSquare size={40} />}
         title="Select a conversation"
-        description="Real-time messaging isn't wired up yet. Search for someone to view their profile in the meantime."
+        description="Pick a chat from the list, or search for someone by username to start a new one."
       />
     </MainPane>
   );

@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Link2, MessageSquare, Pencil } from "lucide-react";
+import { ArrowLeft, Link2, Pencil } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getPublicProfile } from "@/lib/profile/public-profile";
 import { MainPane } from "@/components/features/shell/main-pane";
 import { UserAvatar } from "@/components/features/profile/user-avatar";
+import { MessageButton } from "@/components/features/messaging/message-button";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
   const { username } = await params;
@@ -71,18 +71,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
               </Link>
             </Button>
           ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {/* span wrapper: a disabled button emits no pointer events, so the
-                    tooltip would never fire on its own. */}
-                <span tabIndex={0}>
-                  <Button size="lg" disabled>
-                    <MessageSquare /> Message
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Messaging isn&apos;t available yet</TooltipContent>
-            </Tooltip>
+            <MessageButton username={profile.username} />
           )}
 
           {showsDetails && (

@@ -1,66 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SearchX, Timer } from "lucide-react";
-import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useUserSearch, MIN_SEARCH_LENGTH, type SearchResult } from "@/lib/hooks/use-user-search";
 import { UserAvatar } from "@/components/features/profile/user-avatar";
+import { MessageButton } from "@/components/features/messaging/message-button";
 import { EmptyState } from "@/components/features/shell/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export type SearchResult = {
-  username: string;
-  displayUsername: string;
-  firstName: string;
-  lastName: string | null;
-  avatarUrl: string | null;
-};
-
-export const MIN_SEARCH_LENGTH = 2;
-
-// Keyed by the query it belongs to, so "is this stale?" is a comparison rather
-// than a second piece of state that has to be kept in sync.
-type Outcome = { query: string; limited: boolean; results: SearchResult[] };
+export { MIN_SEARCH_LENGTH };
+export type { SearchResult };
 
 /**
  * Docs/user/search.md §2 — 300ms debounce, no request under 2 characters, 10
- * results max, each row linking to /u/[username].
+ * results max, each row linking to /u/[username], plus a direct Message action
+ * (Docs/chat/chat.md §2.2's "click Message on a search result").
  */
 export function UserSearchResults({ query }: { query: string }) {
-  const debouncedQuery = useDebouncedValue(query.trim(), 300);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-
-  const active = debouncedQuery.length >= MIN_SEARCH_LENGTH;
-  // Derived, not stored: anything not yet answered for this exact query is loading.
-  const loading = active && outcome?.query !== debouncedQuery;
-
-  useEffect(() => {
-    // §4: under 2 characters no request is sent at all — not sent-then-ignored.
-    if (debouncedQuery.length < MIN_SEARCH_LENGTH) return;
-
-    // `ignore` drops out-of-order responses — same guard as the signup form's
-    // username availability check.
-    let ignore = false;
-
-    (async () => {
-      try {
-        const res = await fetch(`/api/users/search?q=${encodeURIComponent(debouncedQuery)}`);
-        if (ignore) return;
-        if (res.status === 429) {
-          setOutcome({ query: debouncedQuery, limited: true, results: [] });
-          return;
-        }
-        const data = await res.json().catch(() => ({ results: [] }));
-        setOutcome({ query: debouncedQuery, limited: false, results: data.results ?? [] });
-      } catch {
-        if (!ignore) setOutcome({ query: debouncedQuery, limited: false, results: [] });
-      }
-    })();
-
-    return () => {
-      ignore = true;
-    };
-  }, [debouncedQuery]);
+  const { active, loading, limited, results } = useUserSearch(query);
 
   if (!active) return null;
 
@@ -80,13 +37,13 @@ export function UserSearchResults({ query }: { query: string }) {
     );
   }
 
-  if (outcome?.limited) {
+  if (limited) {
     // Region state, not a form error — same treatment as "No one found" directly
     // below, rather than a stray line of red text. See FormError's channel rule.
     return <EmptyState icon={<Timer size={28} />} title="Too many searches" description="Slow down for a moment, then try again." />;
   }
 
-  if (!outcome || outcome.results.length === 0) {
+  if (results.length === 0) {
     // §5: identical wording whether there were zero matches or every match was
     // hidden by `discoverable` — a search must never confirm someone exists.
     return <EmptyState icon={<SearchX size={28} />} title="No one found" description="Check the spelling, or try a different username." />;
@@ -94,9 +51,11 @@ export function UserSearchResults({ query }: { query: string }) {
 
   return (
     <ul className="flex flex-col">
-      {outcome.results.map((result) => (
-        <li key={result.username}>
-          <Link href={`/u/${result.username}`} className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2 transition-colors">
+      {results.map((result) => (
+        // Stretched link: the <Link>'s ::after covers the row, so the whole row
+        // is clickable without nesting the Message <button> inside an <a>.
+        <li key={result.username} className="hover:bg-accent relative flex items-center gap-3 rounded-lg px-2 py-2 transition-colors">
+          <Link href={`/u/${result.username}`} className="flex min-w-0 flex-1 items-center gap-3 after:absolute after:inset-0 after:content-['']">
             <UserAvatar src={result.avatarUrl} firstName={result.firstName} lastName={result.lastName} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-medium">
@@ -105,6 +64,9 @@ export function UserSearchResults({ query }: { query: string }) {
               <span className="text-muted-foreground block truncate text-xs">@{result.displayUsername}</span>
             </span>
           </Link>
+          {/* Always visible, never hover-revealed: an opacity-0 control is
+              either an invisible mouse target or unreachable by keyboard. */}
+          <MessageButton username={result.username} iconOnly className="relative z-10 shrink-0" />
         </li>
       ))}
     </ul>
