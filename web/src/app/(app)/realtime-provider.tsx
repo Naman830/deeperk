@@ -32,9 +32,10 @@ import { notifyIncomingMessage, notifyAddedToConversation } from "./message-toas
  *   3. Toasts, the title blink and the sound must fire while the user is in
  *      /settings or /calls.
  *
- * The outbox, drafts and reply state live here for reason (1) too: a half-typed
- * message survives clicking a search result, and an in-flight send survives
- * navigating away mid-send.
+ * The outbox and reply state live here for reason (1) too: an in-flight send
+ * survives navigating away mid-send. Composer drafts get the same persistence
+ * from lib/chat/draft-store.ts instead — as context state, every keystroke
+ * rebuilt this provider's value and re-rendered every consumer.
  */
 
 export type SendStatus = "pending" | "failed";
@@ -84,8 +85,6 @@ type RealtimeValue = {
   presence: Record<string, PresenceEntry>;
   typingIn: (conversationId: string) => string[];
   outboxFor: (conversationId: string) => OutgoingMessage[];
-  draftFor: (conversationId: string) => string;
-  setDraft: (conversationId: string, value: string) => void;
   replyFor: (conversationId: string) => ReplyTarget | null;
   setReply: (conversationId: string, target: ReplyTarget | null) => void;
   editFor: (conversationId: string) => EditTarget | null;
@@ -150,7 +149,6 @@ export function RealtimeProvider({
   const [presence, setPresence] = useState<Record<string, PresenceEntry>>({});
   const [typing, setTyping] = useState<Record<string, Record<string, TypingEntry>>>({});
   const [outbox, setOutbox] = useState<Record<string, OutgoingMessage>>({});
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [replies, setReplies] = useState<Record<string, ReplyTarget | null>>({});
   const [edits, setEdits] = useState<Record<string, EditTarget | null>>({});
   const [receipts, setReceipts] = useState<Record<string, Record<string, Receipt>>>({});
@@ -750,10 +748,6 @@ export function RealtimeProvider({
     socketRef.current?.emit(isTyping ? "typing:start" : "typing:stop", { conversationId });
   }, []);
 
-  const setDraft = useCallback((conversationId: string, value: string) => {
-    setDrafts((current) => ({ ...current, [conversationId]: value }));
-  }, []);
-
   const setReply = useCallback((conversationId: string, target: ReplyTarget | null) => {
     setReplies((current) => ({ ...current, [conversationId]: target }));
     // Replying to something while an edit is open is contradictory — the
@@ -810,8 +804,6 @@ export function RealtimeProvider({
           .map(([, entry]) => entry.username),
       outboxFor: (conversationId) =>
         Object.values(outbox).filter((entry) => entry.conversationId === conversationId),
-      draftFor: (conversationId) => drafts[conversationId] ?? "",
-      setDraft,
       replyFor: (conversationId) => replies[conversationId] ?? null,
       setReply,
       editFor: (conversationId) => edits[conversationId] ?? null,
@@ -839,11 +831,9 @@ export function RealtimeProvider({
       presence,
       typing,
       outbox,
-      drafts,
       replies,
       edits,
       receipts,
-      setDraft,
       setReply,
       setEdit,
       seedReceipts,

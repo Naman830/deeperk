@@ -1,5 +1,5 @@
 import type { ChatMember, ChatMessage } from "@/lib/chat/types";
-import type { OutgoingMessage, Receipt } from "../../../realtime-provider";
+import type { DeleteScope, EditTarget, OutgoingMessage, Receipt, ReplyTarget } from "../../../realtime-provider";
 import { MessageBubble, type ClusterPosition, type TickState } from "./message-bubble";
 
 // No "use client": rendered from chat-thread.tsx, inside its boundary.
@@ -108,6 +108,9 @@ export function MessageList({
   highlightedId,
   selectMode,
   selectedIds,
+  deleteMessage,
+  setReply,
+  setEdit,
   onToggleSelect,
   onEnterSelect,
   onForward,
@@ -126,6 +129,9 @@ export function MessageList({
   highlightedId: string | null;
   selectMode: boolean;
   selectedIds: ReadonlySet<string>;
+  deleteMessage: (messageIds: string | string[], scope: DeleteScope) => Promise<string | null>;
+  setReply: (conversationId: string, target: ReplyTarget | null) => void;
+  setEdit: (conversationId: string, target: EditTarget | null) => void;
   onToggleSelect: (messageId: string) => void;
   onEnterSelect: (messageId: string) => void;
   onForward: (messageId: string) => void;
@@ -195,9 +201,14 @@ export function MessageList({
             highlighted={highlightedId === message.id}
             selectMode={selectMode}
             selected={selectedIds.has(message.id)}
-            onToggleSelect={() => onToggleSelect(message.id)}
-            onEnterSelect={() => onEnterSelect(message.id)}
-            onForward={() => onForward(message.id)}
+            deleteMessage={deleteMessage}
+            setReply={setReply}
+            setEdit={setEdit}
+            // Stable id-taking callbacks, never per-row closures — a fresh
+            // closure per row would defeat MessageBubble's memo entirely.
+            onToggleSelect={onToggleSelect}
+            onEnterSelect={onEnterSelect}
+            onForward={onForward}
             onJumpToMessage={onJumpToMessage}
             replyPreview={
               message.replyToId
@@ -212,8 +223,8 @@ export function MessageList({
                 : null
             }
             error={message.clientMsgId ? pendingByClientId.get(message.clientMsgId)?.error : undefined}
-            onRetry={message.clientMsgId ? () => onRetry(message.clientMsgId!) : undefined}
-            onDiscard={message.clientMsgId ? () => onDiscard(message.clientMsgId!) : undefined}
+            onRetry={onRetry}
+            onDiscard={onDiscard}
           />
         );
       })}

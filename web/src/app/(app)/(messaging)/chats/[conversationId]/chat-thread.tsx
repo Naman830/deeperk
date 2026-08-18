@@ -57,6 +57,8 @@ export function ChatThread({
     retryMessage,
     discardMessage,
     deleteMessage,
+    setReply,
+    setEdit,
     receiptsFor,
     seedReceipts,
   } = useRealtime();
@@ -390,6 +392,10 @@ export function ChatThread({
     setSelectedIds(EMPTY_SET);
   }, []);
 
+  const forwardOne = useCallback((messageId: string) => {
+    setForwarding([messageId]);
+  }, []);
+
   const copySelected = useCallback(async () => {
     const chosen = rendered.filter((item) => selectedIds.has(item.id) && item.type === "TEXT");
     const text = chosen.map((item) => item.body ?? "").join("\n\n");
@@ -477,10 +483,13 @@ export function ChatThread({
             highlightedId={highlightedId}
             selectMode={selectMode}
             selectedIds={selectedIds}
+            deleteMessage={deleteMessage}
+            setReply={setReply}
+            setEdit={setEdit}
             onToggleSelect={toggleSelect}
             onEnterSelect={enterSelect}
-            onForward={(messageId) => setForwarding([messageId])}
-            onJumpToMessage={(messageId) => void jumpToMessage(messageId)}
+            onForward={forwardOne}
+            onJumpToMessage={jumpToMessage}
             onRetry={retryMessage}
             onDiscard={discardMessage}
           />

@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Paperclip, Pencil, Reply, SendHorizontal, Smile, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,7 @@ import { FormError } from "@/components/features/shell/form-error";
 import { apiUpload, GENERIC_ERROR } from "@/lib/api-client";
 import { MESSAGE_MAX_LENGTH, MEDIA_RULES, MEDIA_MAX_BYTES, type MediaKind } from "@/lib/validation/chat";
 import { EMOJI_GROUPS } from "@/lib/chat/emoji";
+import { subscribeDrafts, getDraft, setDraft } from "@/lib/chat/draft-store";
 import { useTypingEmitter } from "@/lib/hooks/use-typing";
 import { cn } from "@/lib/utils";
 import type { ChatMember } from "@/lib/chat/types";
@@ -47,8 +48,6 @@ export function MessageComposer({
   const {
     connection,
     viewerId,
-    draftFor,
-    setDraft,
     sendMessage,
     emitTyping,
     replyFor,
@@ -71,7 +70,13 @@ export function MessageComposer({
 
   // While editing, the composer holds the edited body rather than the draft —
   // so cancelling an edit restores whatever was half-typed before it started.
-  const draft = draftFor(conversationId);
+  // Drafts come from the module store, so a keystroke re-renders only this
+  // composer — never the provider's context consumers.
+  const draft = useSyncExternalStore(
+    subscribeDrafts,
+    () => getDraft(conversationId),
+    () => "",
+  );
   const [editDraft, setEditDraft] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   // Seeding during render rather than in an effect: an effect would render the

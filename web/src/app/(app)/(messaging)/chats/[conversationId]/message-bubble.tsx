@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { toast } from "react-toastify";
 import { Check, CheckCheck, CircleAlert, Clock, FileText, Phone, Reply, RotateCw } from "lucide-react";
 import { UserAvatar } from "@/components/features/profile/user-avatar";
@@ -15,8 +15,7 @@ import { renderMessageBody } from "@/lib/chat/rich-text";
 import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import type { ChatMember, ChatMessage } from "@/lib/chat/types";
-import type { DeleteScope } from "../../../realtime-provider";
-import { useRealtime } from "../../../realtime-provider";
+import type { DeleteScope, EditTarget, ReplyTarget } from "../../../realtime-provider";
 import { MessageActions } from "./message-actions";
 import { MessageMenuItems, canDeleteForEveryone, canReply } from "./message-menu-items";
 import { DeleteMessageDialog } from "./delete-message-dialog";
@@ -29,7 +28,7 @@ export type TickState = "pending" | "sent" | "delivered" | "read" | "failed";
 /** Where this bubble sits in a run of messages from the same sender. */
 export type ClusterPosition = "single" | "first" | "middle" | "last";
 
-export function MessageBubble({
+function MessageBubbleImpl({
   message,
   entering,
   showHeader,
@@ -46,6 +45,9 @@ export function MessageBubble({
   highlighted,
   selectMode,
   selected,
+  deleteMessage,
+  setReply,
+  setEdit,
   onToggleSelect,
   onEnterSelect,
   onForward,
@@ -73,17 +75,22 @@ export function MessageBubble({
   highlighted?: boolean;
   selectMode?: boolean;
   selected?: boolean;
-  onToggleSelect?: () => void;
-  onEnterSelect?: () => void;
-  onForward?: () => void;
+  /** The three realtime actions, passed as props (all stable useCallbacks) so
+   *  this component never subscribes to the context — that subscription is
+   *  what used to re-render every bubble on every socket event. */
+  deleteMessage: (messageIds: string | string[], scope: DeleteScope) => Promise<string | null>;
+  setReply: (conversationId: string, target: ReplyTarget | null) => void;
+  setEdit: (conversationId: string, target: EditTarget | null) => void;
+  onToggleSelect?: (messageId: string) => void;
+  onEnterSelect?: (messageId: string) => void;
+  onForward?: (messageId: string) => void;
   onJumpToMessage?: (messageId: string) => void;
   replyPreview?: { senderName: string; preview: string } | null;
-  onRetry?: () => void;
-  onDiscard?: () => void;
+  onRetry?: (clientMsgId: string) => void;
+  onDiscard?: (clientMsgId: string) => void;
 }) {
   // Hooks first: SYSTEM/CALL returns early below, and an early return above a
   // hook call changes hook order between renders.
-  const { deleteMessage, setReply, setEdit } = useRealtime();
   const [confirming, setConfirming] = useState(false);
 
   // SYSTEM and CALL are centred notices, never grouped and never avatared.
@@ -128,8 +135,8 @@ export function MessageBubble({
     onReply: startReply,
     onCopy: () => void copy(),
     onEdit: startEdit,
-    onForward: onForward ?? (() => {}),
-    onSelect: onEnterSelect ?? (() => {}),
+    onForward: () => onForward?.(message.id),
+    onSelect: () => onEnterSelect?.(message.id),
     onDeleteForMe: openConfirm,
     onDeleteForEveryone: openConfirm,
   };
@@ -241,7 +248,7 @@ export function MessageBubble({
         exiting && "pointer-events-none -translate-y-1 scale-[0.97] opacity-0",
         entering && !exiting && "animate-message-in",
       )}
-      onClick={selectMode ? onToggleSelect : undefined}
+      onClick={selectMode ? () => onToggleSelect?.(message.id) : undefined}
     >
       {/* Two fixed slots, identical on own and received rows — that symmetry is
           the whole point. Previously the avatar gutter was reserved even on own
@@ -309,10 +316,20 @@ export function MessageBubble({
           // on screen, so this is where the failure belongs.
           <span className="mt-0.5 flex items-center gap-1 px-1">
             <span className="text-destructive text-[11px]">{error ?? "Not sent"}</span>
-            <Button type="button" size="xs" variant="ghost" onClick={onRetry}>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              onClick={() => message.clientMsgId && onRetry?.(message.clientMsgId)}
+            >
               <RotateCw /> Retry
             </Button>
-            <Button type="button" size="xs" variant="ghost" onClick={onDiscard}>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              onClick={() => message.clientMsgId && onDiscard?.(message.clientMsgId)}
+            >
               Discard
             </Button>
           </span>
@@ -328,6 +345,14 @@ export function MessageBubble({
     </li>
   );
 }
+
+/**
+ * Memoized so typing, receipt and presence traffic — which re-renders the
+ * whole MessageList — skips the bubbles whose props didn't change. Every
+ * function prop must stay identity-stable (id-taking parent callbacks, never
+ * per-row closures) or this silently degrades to re-rendering everything.
+ */
+export const MessageBubble = memo(MessageBubbleImpl);
 
 function Tick({ state }: { state: TickState }) {
   switch (state) {
