@@ -2,7 +2,8 @@
   "private": true,
   "workspaces": [
     "web",
-    "server"
+    "server",
+    "tests"
   ],
   "devDependencies": {
     "concurrently": "^10.0.4",
@@ -10,7 +11,9 @@
     "drizzle-kit": "^0.31.10"
   },
   "scripts": {
-    "dev": "concurrently \"npm run dev -w web\" \"npm run dev -w server\""
+    "dev": "concurrently \"npm run dev -w web\" \"npm run dev -w server\"",
+    "test": "vitest run --root tests",
+    "test:watch": "vitest --root tests"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
