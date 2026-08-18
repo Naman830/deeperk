@@ -11,7 +11,7 @@ const express = require("express");
 const { Server } = require("socket.io");
 
 const { env } = require("./env");
-const { resolveHandshakeUser } = require("./auth");
+const { resolveHandshakeUser } = require("./socket/auth");
 const presence = require("./presence");
 const { joinInitialRooms } = require("./rooms");
 const { registerChatHandlers } = require("./handlers/chat");

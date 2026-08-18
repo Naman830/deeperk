@@ -1,4 +1,4 @@
-const { env } = require("./env");
+const { env } = require("../env");
 
 /**
  * The handshake from Docs/chat/chat.md §2.1: one internal HTTP round trip per
