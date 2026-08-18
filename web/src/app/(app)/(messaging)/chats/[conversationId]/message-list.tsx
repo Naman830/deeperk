@@ -28,7 +28,7 @@ type Row =
  * rounded block, and the divider lands mid-cluster cutting a bubble group in
  * half. Both read as rendering bugs.
  */
-export function buildRows(messages: ChatMessage[], unreadFrom: string | null): Row[] {
+export function buildRows(messages: ChatMessage[], unreadFrom: string | null, viewerId: string): Row[] {
   const rows: Row[] = [];
   let previous: ChatMessage | null = null;
   let dividerPlaced = false;
@@ -40,15 +40,20 @@ export function buildRows(messages: ChatMessage[], unreadFrom: string | null): R
     }
 
     // The divider goes before the first message newer than the watermark that
-    // this viewer did not send — their own message is never "unread".
+    // this viewer did not send — their own message is never "unread". It may
+    // sit directly under a date separator (an overnight unread opens a new
+    // day); suppressing it there misplaced the divider onto a later message.
     const isUnreadBoundary =
-      !dividerPlaced && unreadFrom !== null && message.createdAt > unreadFrom && !newDay;
+      !dividerPlaced &&
+      unreadFrom !== null &&
+      message.createdAt > unreadFrom &&
+      message.senderId !== viewerId;
     if (isUnreadBoundary) {
       dividerPlaced = true;
       rows.push({
         kind: "unread",
         key: `unread-${message.id}`,
-        count: messages.filter((item) => item.createdAt > unreadFrom).length,
+        count: messages.filter((item) => item.createdAt > unreadFrom && item.senderId !== viewerId).length,
       });
     }
 
@@ -128,7 +133,7 @@ export function MessageList({
   onRetry: (clientMsgId: string) => void;
   onDiscard: (clientMsgId: string) => void;
 }) {
-  const rows = buildRows(messages, unreadFrom);
+  const rows = buildRows(messages, unreadFrom, viewerId);
   // Only the newest row gets the entry animation, and that is what keeps it
   // cheap: prepending 30 older messages during infinite scroll mounts 30 new
   // <li>s, and animating those would be a wave of motion every time the user

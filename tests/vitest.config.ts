@@ -1,5 +1,9 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Alphabetical file order (the specs are number-prefixed), never the default
@@ -15,6 +19,8 @@ class AlphabeticalSequencer extends BaseSequencer {
 }
 
 export default defineConfig({
+  // Lets unit tests import pure helpers straight from web/src (e.g. buildRows).
+  resolve: { alias: { "@": path.resolve(here, "..", "web", "src") } },
   test: {
     globals: true,
     environment: "node",
