@@ -7,6 +7,14 @@ function registerConnectionHandlers(io, bootId) {
   io.on("connection", async (socket) => {
     const userId = socket.data.user.id;
 
+    // Listeners FIRST, before any awaited work. Socket.IO silently drops an
+    // event that arrives with no listener, and a client — or its reconnect
+    // buffer, which flushes the instant the transport opens — may emit as soon
+    // as it sees session:ready. Registering after the presence round trips
+    // left a window a whole Neon query wide where a send was lost with no ack,
+    // no error, no log (found by the e2e harness, 2026-08-18).
+    registerChatHandlers(io, socket);
+
     let conversationIds = [];
     try {
       conversationIds = await joinInitialRooms(socket);
@@ -32,8 +40,6 @@ function registerConnectionHandlers(io, bootId) {
         console.error("[socket:presence-online]", error);
       }
     }
-
-    registerChatHandlers(io, socket);
 
     // "disconnecting", not "disconnect": by the time disconnect fires
     // socket.rooms is already cleared, so there is nothing left to broadcast to.
