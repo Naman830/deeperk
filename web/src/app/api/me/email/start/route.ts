@@ -9,7 +9,7 @@ import { auth } from "@/lib/auth/server";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { emailSchema } from "@/lib/validation/signup";
-import { sendEmailChangeOtpEmail } from "@/lib/integrations/resend";
+import { sendEmailChangeOtpEmail } from "@/lib/integrations/brevo";
 import { logServerError } from "@/lib/log";
 
 const OTP_TTL_SECONDS = 5 * 60;

@@ -9,7 +9,7 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
 | `web/` — Next.js app (UI + all `/api/*` routes) | [Vercel](https://vercel.com) | Hobby plan |
 | `server/` — Socket.IO realtime server | [Render](https://render.com) | Free web service |
 | Postgres database | [Neon](https://neon.tech) | Free plan |
-| Transactional email (signup / password-reset OTPs) | [Resend](https://resend.com) | Free plan |
+| Transactional email (signup / password-reset OTPs) | [Brevo](https://www.brevo.com) | Free plan — 300 emails/day |
 | Avatar & chat-media storage | [Cloudinary](https://cloudinary.com) | Free plan |
 
 ```
@@ -26,7 +26,7 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
                        └──────────────┬──────────────────┘
                                       │
               Neon Postgres ◄─────────┴────────► (both talk to the same DB)
-              Resend / Cloudinary ◄── Vercel only
+              Brevo / Cloudinary ◄── Vercel only
 ```
 
 ## Why this exact topology (read before changing it)
@@ -40,7 +40,7 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
 ## Step 0 — prerequisites
 
 1. Fork or push this repo to your own GitHub account (Vercel and Render deploy from GitHub).
-2. Create free accounts on Vercel, Render, Neon, Resend, Cloudinary.
+2. Create free accounts on Vercel, Render, Neon, Brevo, Cloudinary.
 3. Generate **three secrets** locally and save them somewhere — you'll paste them into dashboards later:
 
    ```bash
@@ -64,12 +64,17 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
 
    The spinner can sit **60–90 seconds with no output** on this driver — that's normal, not a hang. When it finishes, all 15 tables exist.
 
-## Step 2 — Resend (email)
+## Step 2 — Brevo (email)
 
-1. Create an API key → this is `RESEND_API_KEY`.
-2. Set `RESEND_FROM_EMAIL` to `ChatSphere <onboarding@resend.dev>`.
+1. **SMTP & API → API Keys tab → Generate a new API key** → this is `BREVO_API_KEY`. **It must start with `xkeysib-`.** The neighbouring *SMTP* tab issues `xsmtpsib-` keys for the SMTP relay; they look identical in length but the REST API rejects them with `401 "Key not found"`, which looks like a revoked key rather than the wrong kind. Verify with `curl -H "api-key: $BREVO_API_KEY" https://api.brevo.com/v3/account`.
+2. **Senders, Domains & IPs → Senders → Add a sender.** Enter the address you want mail to come from (a plain Gmail address is fine — **no domain and no DNS records needed**), then enter the 6-digit code Brevo emails to it. Set `BREVO_FROM_EMAIL` to that address and `BREVO_FROM_NAME` to `ChatSphere`.
+3. **Security → Authorised IPs — check this, it is NOT reliably off.** Brevo challenges calls from unrecognised IPs even on a fresh account with a valid key, answering `401 "We have detected you are using an unrecognised IP address ..."`. Authorise your IP at <https://app.brevo.com/security/authorised_ips> (Brevo usually emails you a link too).
 
-> **⚠ Free-tier limitation you must know:** without a verified custom domain, Resend only delivers mail sent from `onboarding@resend.dev` **to the email address of your own Resend account**. So on a domain-less free deploy, only *you* can complete signup/password-reset (use your own address, plus-addressing like `you+test2@gmail.com` works for extra accounts if your provider supports it). Anyone else's OTP email is refused, and the signup UI will surface a delivery error (the app maps failed sends to a 502 rather than pretending success). To let arbitrary people sign up, verify a domain in Resend (needs a ~$10/yr domain) and change `RESEND_FROM_EMAIL` to that domain.
+> **⚠ This matters for production, not just local testing.** Vercel's egress IPs rotate and can't be allow-listed ahead of time, so **IP restriction must be disabled** on the Brevo account before deploying — otherwise sends fail intermittently with a 401 that looks identical to a bad API key.
+
+> **⚠ Sender verification is not optional.** Until step 2 is done, Brevo refuses every send with a 400 and the signup UI shows a delivery error (the app maps failed sends to a 502 rather than pretending success).
+
+> **Free-tier realities:** **300 emails/day**, which is ample for a portfolio deploy but is a hard daily cap — past it, sends fail and signup returns 502 until the counter resets. Unlike Resend's free tier, Brevo delivers to **any recipient**, so anyone can sign up. The trade-off is deliverability: mail sent from a `gmail.com` address carries Brevo's DKIM signature rather than Gmail's, so it isn't DMARC-aligned for `gmail.com` and lands in **Spam/Promotions** more often than a domain-aligned sender would. It is delivered, not rejected (`gmail.com` publishes `p=none`) — tell first-time users to check spam. Verifying a real domain in Brevo (needs a ~$10/yr domain) removes the caveat entirely; nothing in the code changes, only `BREVO_FROM_EMAIL`.
 
 ## Step 3 — Cloudinary (media)
 
@@ -121,8 +126,9 @@ Environment variables (add for Production):
 | `BETTER_AUTH_SECRET` | the hex secret from Step 0 |
 | `BETTER_AUTH_URL` | `https://<your-app>.vercel.app` |
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | `https://<your-app>.vercel.app` |
-| `RESEND_API_KEY` | from Step 2 |
-| `RESEND_FROM_EMAIL` | `ChatSphere <onboarding@resend.dev>` |
+| `BREVO_API_KEY` | from Step 2 |
+| `BREVO_FROM_EMAIL` | the sender address you verified in Step 2 |
+| `BREVO_FROM_NAME` | `ChatSphere` |
 | `CLOUDINARY_CLOUD_NAME` | from Step 3 |
 | `CLOUDINARY_API_KEY` | from Step 3 |
 | `CLOUDINARY_API_SECRET` | from Step 3 |
@@ -144,7 +150,7 @@ Go back to Render and set `WEB_ORIGIN` and `WEB_INTERNAL_URL` to the real Vercel
 
 1. `https://<render-url>/healthz` → `{"ok":true,…}`.
 2. Open the Vercel URL → login page renders.
-3. Sign up **with your Resend account's email** (Step 2 limitation) → OTP arrives → complete signup.
+3. Sign up with any email address → OTP arrives (**check Spam** on the first one — see Step 2) → complete signup.
 4. Open a second browser (or incognito) with a second account (plus-addressing), start a direct chat, and send messages both ways — they should appear **live without refreshing**. In DevTools → Network you'll see `socket.io` long-polling requests against your Vercel origin; that's expected (no WebSocket — see "Why this topology").
 5. Upload an avatar in Settings → Profile (keep it under ~4 MB — see below).
 
@@ -152,7 +158,7 @@ Go back to Render and set `WEB_ORIGIN` and `WEB_INTERNAL_URL` to the real Vercel
 
 - **Cold starts:** Render free spins the socket server down after ~15 min idle; the next visitor's chat takes 30–60 s to connect while it boots (messages still send/load via the Vercel API routes — only realtime delivery waits). Neon also autosuspends compute after inactivity; the first query pays ~0.5–1 s. Acceptable for a demo. *Optional keep-warm:* a free monitor (cron-job.org or UptimeRobot) hitting `<render-url>/healthz` every 10 minutes prevents spin-down and fits within Render's 750 free instance-hours/month for a single service.
 - **Vercel's ~4.5 MB request-body cap** rejects uploads near the app's own 5 MB limit before the app ever sees them. Large avatars/chat media fail at the edge with a platform error; most photos are smaller. (Self-hosting the web app is the only free way around this.)
-- **Email recipients are restricted** until a domain is verified in Resend (Step 2 note).
+- **Email is capped at 300/day** on Brevo's free plan, and mail from a domain-less sender often lands in Spam (Step 2 note).
 - **One socket instance only** — never scale the Render service horizontally as configured.
 - **Deploys are automatic**: pushing to `main` redeploys Vercel; Render redeploys on push too (both watch the GitHub repo).
 
@@ -170,6 +176,6 @@ Call signaling/UI is not built yet. When it lands, real-world calls need a TURN 
 | Socket connects locally but every production connection is rejected (`UNAUTHENTICATED`) | `NEXT_PUBLIC_SOCKET_URL` points at the Render URL instead of the Vercel origin — cookie never sent |
 | Connections rejected with CORS/origin errors in the Render log | `WEB_ORIGIN` doesn't exactly match the Vercel URL (scheme + host, no trailing slash) |
 | Media messages all rejected / 503 | `MEDIA_SIGNING_SECRET` differs between Vercel and Render (or is unset on one) |
-| Signup says email delivery failed (502) | Resend free tier refuses recipients other than your account email (Step 2), or `RESEND_API_KEY` invalid |
+| Signup says email delivery failed (502) | Sender not verified in Brevo (400 — Step 2), `BREVO_API_KEY` invalid or Authorized IPs enabled (401), or the 300/day quota is spent. The real cause is in the Vercel function log — the app logs it and returns a generic message |
 | Avatar upload 503 | Cloudinary env vars missing; 403-on-upload means the API key lacks the `create` permission |
 | First request after idle hangs ~1 min | Render cold start — expected on the free tier |

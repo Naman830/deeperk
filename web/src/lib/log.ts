@@ -4,8 +4,8 @@
  * Routes map third-party failures to a generic status + message so nothing
  * internal leaks to the client. That's correct, but it previously meant the real
  * cause vanished entirely — `web/src` had no logging at all, which is how a
- * Resend refusal reported success for weeks and how a Cloudinary 403 surfaced only
- * as "Upload failed. Please try again."
+ * refused email send reported success for weeks and how a Cloudinary 403 surfaced
+ * only as "Upload failed. Please try again."
  *
  * Only ever called from route handlers and server modules, so this writes to the
  * server log and never reaches the browser. Deliberately console.error rather than

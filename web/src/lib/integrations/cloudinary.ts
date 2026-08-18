@@ -11,7 +11,7 @@ export class CloudinaryNotConfiguredError extends Error {}
 // "EXIF stripped". Trade-off: the crop is baked in and can't be re-derived.
 const AVATAR_TRANSFORM = { width: 512, height: 512, crop: "fill", gravity: "face" } as const;
 
-// Lazily configured, same reason as lib/integrations/resend.ts: this module loads at build,
+// Lazily configured, same reason as lib/integrations/brevo.ts: this module loads at build,
 // type-check, and CLI time, not just per-request, so importing it must never
 // throw just because credentials aren't set yet.
 let configured = false;

@@ -11,7 +11,7 @@ Login and Signup are two separate pages (not a single "one door" email screen). 
 | **Frontend** | Next.js · `react-toastify` (error/success toasts) |
 | **Backend** | Node.js + Express.js · `nodemon` (dev reload) · `concurrently` (run Next.js + Express together) · Node's built-in `crypto` (OTP generation) |
 | **Database** | Neon (serverless Postgres) · Drizzle ORM |
-| **Email** | Resend (OTP + reset codes) |
+| **Email** | Brevo (OTP + reset codes) |
 | **Auth** | Better Auth (sessions, password hashing via `scrypt`, rate limiting) |
 
 **Already implemented:** `zod` validates the signup/login form payloads on the server — pairs naturally with Drizzle and keeps field rules (below) enforced in one place instead of copy-pasted per route.
@@ -45,7 +45,7 @@ flowchart TD
         SEmail --> SExists{"Already registered?"}
         SExists -->|Yes| SErr["'Email already exists'"]
         SErr --> LoginPage
-        SExists -->|No| SOtp["Send 6-digit OTP<br/>via Resend · sha-256 hash · 5min TTL<br/>5/hr per email, 20/hr per IP"]
+        SExists -->|No| SOtp["Send 6-digit OTP<br/>via Brevo · sha-256 hash · 5min TTL<br/>5/hr per email, 20/hr per IP"]
         SOtp --> SPend["PendingRegistration row created"]
         SPend --> SVerify{"Code correct?"}
         SVerify -->|"Wrong, attempts < 3"| SRetry["attempts++, re-enter"]
@@ -73,7 +73,7 @@ flowchart TD
 
 **Login:** email + password, checked together. Wrong on either side gives the exact same error — *"the email doesn't exist or the password is wrong"* — so a failed attempt never confirms whether an account exists. Forgot password sends a reset code to the email (if an account exists — same non-committal response), and a successful reset revokes every other active session so a stolen password can't keep a stale session alive elsewhere.
 
-**Signup:** email first. If it's already registered, the user is told and sent to Login — this one screen is allowed to confirm existence, since the user already declared themselves "new." Otherwise a 6-digit OTP goes out (Resend), and a `PendingRegistration` row holds the hashed code — nothing is written to `User` yet. Once the code checks out, that row is deleted immediately and a short-lived, httpOnly, signed registration-token cookie takes over as proof "this browser verified this email" for the rest of signup (First Name → Last Name → Username → DOB → Password). The `User` row is only written at the very end, in the same transaction that creates the session — so an abandoned signup never leaves a half-built account behind.
+**Signup:** email first. If it's already registered, the user is told and sent to Login — this one screen is allowed to confirm existence, since the user already declared themselves "new." Otherwise a 6-digit OTP goes out (Brevo), and a `PendingRegistration` row holds the hashed code — nothing is written to `User` yet. Once the code checks out, that row is deleted immediately and a short-lived, httpOnly, signed registration-token cookie takes over as proof "this browser verified this email" for the rest of signup (First Name → Last Name → Username → DOB → Password). The `User` row is only written at the very end, in the same transaction that creates the session — so an abandoned signup never leaves a half-built account behind.
 
 ---
 
@@ -144,6 +144,6 @@ Password never lives on `user` — it's on `account`, so a stray `SELECT user.*`
 
 **2FA (TOTP).** Opt-in from Settings: confirm current password → scan a QR code → enter a code to prove it works before it's enabled → show 10 backup codes once. After that, login becomes email/password → app code. Build with Better Auth's `twoFactor` plugin — it handles secret generation, encryption at rest, code verification, and backup codes; our side is mostly the Settings UI.
 
-**Device sessions & login alerts.** A Settings screen listing every active session (device, browser, approximate location from IP, last active) with per-device logout and "log out everywhere," plus an email when a login comes from an unrecognized device. Build on top of the `ipAddress`/`userAgent` Better Auth already stores per `session` row — this is mostly UI plus a "is this device known?" check that fires an email via Resend.
+**Device sessions & login alerts.** A Settings screen listing every active session (device, browser, approximate location from IP, last active) with per-device logout and "log out everywhere," plus an email when a login comes from an unrecognized device. Build on top of the `ipAddress`/`userAgent` Better Auth already stores per `session` row — this is mostly UI plus a "is this device known?" check that fires an email via Brevo.
 
 **HIBP breach-password check.** On password set, hash it (SHA-1), send only the first 5 characters to the Have I Been Pwned range API (k-anonymity — the real password/hash never leaves our server), and reject it if the full hash shows up in the ~800 results returned. Build with Better Auth's `haveIBeenPwned` plugin — one line in the plugins array. Should fail open (allow the password) if the HIBP API is down, so a third-party outage never blocks signup.

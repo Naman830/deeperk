@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { user, pendingRegistration } from "../../../../../../db/schema";
 import { emailSchema } from "@/lib/validation/signup";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { sendSignupOtpEmail } from "@/lib/integrations/resend";
+import { sendSignupOtpEmail } from "@/lib/integrations/brevo";
 import { auth } from "@/lib/auth/server";
 import { logServerError } from "@/lib/log";
 

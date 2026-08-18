@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth/server";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { otpSchema } from "@/lib/validation/signup";
-import { sendEmailChangedNoticeEmail } from "@/lib/integrations/resend";
+import { sendEmailChangedNoticeEmail } from "@/lib/integrations/brevo";
 import { logServerError } from "@/lib/log";
 
 const MAX_ATTEMPTS = 3;

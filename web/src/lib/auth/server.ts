@@ -6,7 +6,8 @@ import { db } from "../db";
 import { eq } from "../db/drizzle-ops";
 import * as schema from "../../../../db/schema";
 import { user as userTable } from "../../../../db/schema";
-import { sendForgotPasswordOtpEmail } from "../integrations/resend";
+import { sendForgotPasswordOtpEmail } from "../integrations/brevo";
+import { logServerError } from "../log";
 import { checkRateLimit } from "../rate-limit";
 import { isUsernameAllowed } from "../validation/username";
 import { toCanonicalUsername } from "../validation/signup";
@@ -116,7 +117,14 @@ export const auth = betterAuth({
           // OTP flows are never invoked by this app's client.
           throw new Error(`Unexpected email OTP type "${type}" — this app only issues forget-password OTPs`);
         }
-        await sendForgotPasswordOtpEmail(email, otp);
+        // Better Auth runs this callback through runInBackgroundOrAwait, which
+        // catches and only debug-logs, then answers success — so without this a
+        // failed send is invisible. Rethrow: the response stays non-committal on
+        // purpose (auth.md §5, no account enumeration).
+        await sendForgotPasswordOtpEmail(email, otp).catch((err) => {
+          logServerError("forgot-password:send-otp", err);
+          throw err;
+        });
       },
     }),
   ],

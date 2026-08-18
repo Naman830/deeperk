@@ -1,29 +1,37 @@
-import { Resend } from "resend";
+const ENDPOINT = "https://api.brevo.com/v3/smtp/email";
 
-// Lazily constructed so importing this module (e.g. from web/src/lib/auth/server.ts,
-// which loads at build/type-check/CLI-generate time too, not just at request
-// time) never fails just because RESEND_API_KEY isn't set yet — the Resend
-// constructor itself throws immediately on a missing key. See web/.env.local.
-let resend: Resend | undefined;
-function getResendClient(): Resend {
-  resend ??= new Resend(process.env.RESEND_API_KEY);
-  return resend;
-}
-
-const FROM = process.env.RESEND_FROM_EMAIL ?? "ChatSphere <onboarding@resend.dev>";
-
-/** Thrown when Resend refused the send — routes map this to 502, never a silent success. */
+/** Thrown when Brevo refused the send — routes map this to 502, never a silent success. */
 export class EmailDeliveryError extends Error {}
 
 /**
- * `emails.send()` RESOLVES with `{ data, error }` instead of throwing, so an
- * unchecked call reports success for an email that was never sent — the user is
- * told "check your inbox" and waits forever for a code that does not exist.
- * Every send goes through here so that can't happen.
+ * Every send goes through here so a refusal can't read as success — the user
+ * being told "check your inbox" for a code that was never sent is the failure
+ * this guards against. With plain fetch that means checking `res.ok`; ignoring
+ * it is the same class of mistake as discarding Resend's `{ data, error }`.
+ *
+ * Env is read per-send, not at module load: this module is imported by
+ * lib/auth/server.ts, which loads at build/type-check/CLI time too, so nothing
+ * here may throw just because the key isn't set yet.
  */
 async function send(to: string, subject: string, text: string) {
-  const { error } = await getResendClient().emails.send({ from: FROM, to, subject, text });
-  if (error) throw new EmailDeliveryError(`${error.name}: ${error.message}`);
+  const apiKey = process.env.BREVO_API_KEY;
+  const email = process.env.BREVO_FROM_EMAIL;
+  if (!apiKey || !email) throw new EmailDeliveryError("BREVO_API_KEY / BREVO_FROM_EMAIL are not set");
+  const name = process.env.BREVO_FROM_NAME ?? "ChatSphere";
+
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ sender: { name, email }, to: [{ email: to }], subject, textContent: text }),
+    // fetch has no default timeout; without this a stalled connection hangs the
+    // route handler until the host's own invocation limit kills it.
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    // Brevo errors are { code, message }, but a proxy can answer with HTML.
+    const body = await res.text().catch(() => "");
+    throw new EmailDeliveryError(`Brevo ${res.status}: ${body.slice(0, 300)}`);
+  }
 }
 
 /** Signup OTP (Docs/user/auth.md §2 "Signup") — 6-digit code, 5-minute TTL. */
