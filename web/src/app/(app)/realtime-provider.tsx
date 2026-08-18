@@ -37,7 +37,7 @@ import { notifyIncomingMessage, notifyAddedToConversation } from "./message-toas
  * navigating away mid-send.
  */
 
-export type SendStatus = "uploading" | "pending" | "failed";
+export type SendStatus = "pending" | "failed";
 export type DeleteScope = "me" | "everyone";
 
 export type OutgoingMessage = {
@@ -53,7 +53,6 @@ export type OutgoingMessage = {
   replyToId?: string | null;
   createdAt: string;
   status: SendStatus;
-  progress?: number;
   error?: string;
 };
 
