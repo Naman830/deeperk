@@ -16,7 +16,7 @@ const presence = require("./presence");
 const { joinInitialRooms } = require("./rooms");
 const { registerChatHandlers } = require("./handlers/chat");
 const notify = require("./handlers/notify");
-const { internalRouter } = require("./internal");
+const { internalRouter } = require("./http/internal");
 
 const BOOT_ID = randomUUID();
 const MAX_SOCKETS_PER_USER = 10;

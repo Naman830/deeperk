@@ -1,11 +1,11 @@
 const express = require("express");
 const { timingSafeEqual } = require("node:crypto");
-const { env } = require("./env");
+const { env } = require("../env");
 const {
   joinUsersToConversation,
   removeUsersFromConversation,
-} = require("./rooms");
-const notify = require("./handlers/notify");
+} = require("../rooms");
+const notify = require("../handlers/notify");
 
 /**
  * The web -> socket hook.
