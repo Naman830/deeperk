@@ -50,6 +50,6 @@ Not part of any API surface — both need a scheduler, and none is chosen yet. N
 ### 4. Verify
 
 - [x] Auth / Profile / Search verified end-to-end against the real Neon DB and a running `next dev` (66 API checks + 21 page-render checks). See CLAUDE.md → "End-to-end verification pass".
-- [ ] **Cloudinary API key can't upload.** Credentials are set and `ping()` works, but the key is restricted: uploads 403 with `missing permissions (actions=["create"])`. Grant `create`+`read`, or use an unrestricted key. Avatar upload is the only feature blocked; all of its validation is verified.
+- [x] **Cloudinary API key works** (re-verified 2026-08-17). `ping()`, `usage()`, and a real upload + destroy all succeed for both `image` and `raw` resource types. The earlier `actions=["create"]` 403 is gone, so nothing is blocked on credentials.
 - [ ] **Set `TRUSTED_PROXIES`** before deploying, or every IP-keyed rate limit is bypassable via a client-supplied `x-forwarded-for`.
 - [ ] Chat / Call verification (once built)
