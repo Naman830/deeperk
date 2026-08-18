@@ -51,83 +51,113 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Elevation, as tokens rather than Tailwind's stock shadows.
+     The stock scale is tuned for black-on-white: on a #0b0c0f ground a
+     translucent-black shadow is invisible, so every "raised" surface in dark
+     mode read as flat. These carry a ring as well as a drop, which is what
+     actually separates a popover from the page in the dark theme. */
+  --shadow-e1: var(--elevation-1);
+  --shadow-e2: var(--elevation-2);
+  --shadow-e3: var(--elevation-3);
 }
 
 /* Light. `--sidebar` is the app's rail + list column; `--background` is the
-   main pane, so the two panels read as distinct surfaces. */
+   main pane, so the two panels read as distinct surfaces.
+
+   The neutrals carry a few degrees of the brand's blue rather than being pure
+   grey — against an indigo primary a neutral grey reads slightly yellow, and
+   the whole app looked subtly dirty next to its own buttons. */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
   --background: #ffffff;
-  --foreground: #14161a;
+  --foreground: #101218;
   --card: #ffffff;
-  --card-foreground: #14161a;
+  --card-foreground: #101218;
   --popover: #ffffff;
-  --popover-foreground: #14161a;
+  --popover-foreground: #101218;
   --primary: #3f4fd1;
   --primary-foreground: #ffffff;
-  --secondary: #f1f2f6;
-  --secondary-foreground: #14161a;
-  --muted: #f1f2f6;
-  --muted-foreground: #61666d;
-  --accent: #eceefc;
+  --secondary: #f2f3f7;
+  --secondary-foreground: #101218;
+  --muted: #f2f3f7;
+  --muted-foreground: #5d6371;
+  --accent: #ecedfb;
   --accent-foreground: #3341b8;
   --destructive: #d93036;
   --destructive-foreground: #ffffff;
   --success: #2f9e63;
-  --border: #e3e6ea;
-  --input: #e3e6ea;
+  --border: #e4e6ed;
+  --input: #e4e6ed;
   --ring: #3f4fd1;
   --chart-1: #3f4fd1;
   --chart-2: #2f9e63;
   --chart-3: #d98324;
   --chart-4: #8b5cd6;
   --chart-5: #d93036;
-  --sidebar: #f7f8fa;
-  --sidebar-foreground: #14161a;
+  --sidebar: #f8f9fc;
+  --sidebar-foreground: #101218;
   --sidebar-primary: #3f4fd1;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eceefc;
+  --sidebar-accent: #ecedfb;
   --sidebar-accent-foreground: #3341b8;
-  --sidebar-border: #e3e6ea;
+  --sidebar-border: #e4e6ed;
   --sidebar-ring: #3f4fd1;
+
+  --elevation-1: 0 1px 2px 0 rgb(16 18 24 / 0.05), 0 0 0 1px rgb(16 18 24 / 0.04);
+  --elevation-2: 0 4px 12px -2px rgb(16 18 24 / 0.08), 0 0 0 1px rgb(16 18 24 / 0.05);
+  --elevation-3: 0 12px 32px -8px rgb(16 18 24 / 0.14), 0 0 0 1px rgb(16 18 24 / 0.06);
 }
 
-/* Dark — the app's designed default, matching the reference sketch. */
+/* Dark — the app's designed default, matching the reference sketch.
+
+   Four distinct surface steps rather than three: #0a0b0f ground, #101218
+   sidebar/card, #16181f popover, #1c1f27 muted. The old palette reused one
+   value for card and sidebar, so a dialog over the list column had no visible
+   edge at all. Elevation below supplies the ring that a drop shadow cannot on
+   a near-black ground. */
 .dark {
-  --background: #0b0c0f;
-  --foreground: #e8eaed;
-  --card: #131519;
-  --card-foreground: #e8eaed;
-  --popover: #16191f;
-  --popover-foreground: #e8eaed;
+  --background: #0a0b0f;
+  --foreground: #e9ebef;
+  --card: #101218;
+  --card-foreground: #e9ebef;
+  --popover: #16181f;
+  --popover-foreground: #e9ebef;
   --primary: #5b6cff;
   --primary-foreground: #ffffff;
-  --secondary: #1a1d23;
-  --secondary-foreground: #e8eaed;
-  --muted: #1a1d23;
-  --muted-foreground: #9aa0a9;
+  --secondary: #1c1f27;
+  --secondary-foreground: #e9ebef;
+  --muted: #1c1f27;
+  --muted-foreground: #98a0ae;
   --accent: #1e2340;
-  --accent-foreground: #a5b0ff;
+  --accent-foreground: #a9b3ff;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
-  --success: #30a46c;
-  --border: #23262d;
-  --input: #262a32;
+  --success: #3dd68c;
+  --border: #23262f;
+  --input: #272b35;
   --ring: #5b6cff;
   --chart-1: #5b6cff;
-  --chart-2: #30a46c;
+  --chart-2: #3dd68c;
   --chart-3: #e2a03f;
   --chart-4: #a78bfa;
   --chart-5: #e5484d;
-  --sidebar: #131519;
-  --sidebar-foreground: #e8eaed;
+  --sidebar: #101218;
+  --sidebar-foreground: #e9ebef;
   --sidebar-primary: #5b6cff;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #1e2340;
-  --sidebar-accent-foreground: #a5b0ff;
-  --sidebar-border: #23262d;
+  --sidebar-accent-foreground: #a9b3ff;
+  --sidebar-border: #23262f;
   --sidebar-ring: #5b6cff;
+
+  /* A lifting hairline as well as a drop: on a #0a0b0f ground a black shadow
+     is literally invisible, so without the inset top highlight and the ring
+     every raised surface reads as flat. */
+  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.5), inset 0 1px 0 0 rgb(255 255 255 / 0.03);
+  --elevation-2: 0 6px 16px -4px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --elevation-3: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.08);
 }
 
 /* react-toastify, mapped onto the design tokens.
@@ -163,16 +193,54 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Two small typographic upgrades that apply everywhere and cost nothing:
+       contextual alternates + kerning, and tabular figures wherever a number
+       sits in a changing row (timestamps, unread counts) so digits stop
+       jittering as they update. */
+    font-feature-settings: "cv11", "ss01";
+    font-variant-ligatures: contextual;
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply font-sans;
+    /* The shell is a fixed h-dvh flex layout, so the page itself must never
+       scroll — only its columns do. Without this, iOS Safari rubber-banding
+       drags the whole app away from the viewport edges. */
+    overscroll-behavior: none;
+  }
+
+  /* A visible, brand-coloured focus ring on every keyboard-focused control.
+     shadcn's primitives set their own on most components; this catches the
+     plain <button>s and <a>s written by hand across the app, which previously
+     fell back to the UA outline (invisible on the dark ground). */
+  :where(a, button, [role="button"], summary):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--primary) 30%, transparent);
+  }
+
+  h1,
+  h2,
+  h3 {
+    /* Geist's default tracking is loose at heading sizes. */
+    letter-spacing: -0.011em;
   }
 }
 
-/* Thin scrollbars in the two scrolling columns — default chrome is heavy
-   against a 320px panel. */
+/* Thin scrollbars in the scrolling columns — default chrome is heavy against a
+   320px panel. The thumb only appears on hover of the container, which is what
+   keeps the conversation list clean at rest. */
 .scroll-thin {
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 200ms;
+}
+.scroll-thin:hover,
+.scroll-thin:focus-within {
   scrollbar-color: var(--border) transparent;
 }
 .scroll-thin::-webkit-scrollbar {
@@ -180,6 +248,70 @@
   height: 8px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background-color: var(--border);
+  background-color: transparent;
   border-radius: 9999px;
+  transition: background-color 200ms;
+}
+.scroll-thin:hover::-webkit-scrollbar-thumb,
+.scroll-thin:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+}
+
+/* Elevation, applied by data-slot rather than by editing the generated
+ * primitives in components/ui/ — those are CLI output and the repo's rule is to
+ * regenerate them, not hand-edit, so a `shadcn add --overwrite` would silently
+ * revert any change made there. Targeting the slot attribute survives that.
+ *
+ * Only floating surfaces get it. Cards stay flat: they sit ON the page rather
+ * than above it, and shadowed cards in a settings list read as clutter. */
+[data-slot="popover-content"],
+[data-slot="tooltip-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="dropdown-menu-sub-content"],
+[data-slot="context-menu-content"],
+[data-slot="context-menu-sub-content"] {
+  box-shadow: var(--elevation-2);
+}
+
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"] {
+  box-shadow: var(--elevation-3);
+}
+
+/* Message entry.
+ *
+ * Applied to the newest bubble only (see message-list) rather than to every
+ * <li>: animating the whole list would re-run on every prepend of 30 older
+ * messages during infinite scroll, and on every re-render of the merged array.
+ *
+ * translateY is small and the duration short on purpose — a message arriving is
+ * a frequent event, and anything more theatrical becomes irritating by the
+ * twentieth time. */
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-message-in {
+  animation: message-in 160ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* Everything above is decoration. One global opt-out, so a user who has asked
+   the OS for less motion gets a static app rather than a slightly-less-animated
+   one — including the third-party toast animations, which have no other switch. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Palette, Shield, UserRound, Wrench } from "lucide-react";
+import { Bell, Palette, Shield, UserRound, Wrench } from "lucide-react";
 import { ListColumn } from "@/components/features/shell/list-column";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,12 @@ const SECTIONS = [
   { href: "/settings/profile", label: "Profile", description: "Name, photo, bio and links", icon: UserRound },
   { href: "/settings/privacy", label: "Privacy", description: "Who can find and see you", icon: Shield },
   { href: "/settings/account", label: "Account", description: "Username, email, password", icon: Wrench },
+  {
+    href: "/settings/notifications",
+    label: "Notifications",
+    description: "Popups, sound and tab title",
+    icon: Bell,
+  },
   { href: "/settings/appearance", label: "Appearance", description: "Theme", icon: Palette },
 ];
 

@@ -32,7 +32,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // The provider wraps the rail as well as {children}, which is the whole
     // reason it lives at this level. {children} stays a server-rendered JSX
     // prop, so (messaging)/layout.tsx remains a server component.
-    <RealtimeProvider viewerId={session.user.id} initialConversations={chat.conversations}>
+    <RealtimeProvider
+      viewerId={session.user.id}
+      // Needed to answer "does this message mention me?" without a lookup —
+      // mentions are parsed from the body, not stored, so the handle has to
+      // travel with the provider.
+      viewerUsername={profile.username}
+      initialConversations={chat.conversations}
+    >
       {/* pb-16 clears the mobile bottom tab bar; md:pb-0 once the rail goes vertical. */}
       <div className="flex h-dvh flex-col overflow-hidden pb-16 md:flex-row md:pb-0">
         <AppRail

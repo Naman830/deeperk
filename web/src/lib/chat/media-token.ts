@@ -29,6 +29,9 @@ export type MediaTokenPayload = {
   size: number;
   name: string;
   t: Extract<SendableMessageType, "IMAGE" | "VIDEO" | "FILE">;
+  /** intrinsic pixel width / height — images only, absent for video and files */
+  w?: number;
+  h?: number;
   /** expiry, epoch ms */
   exp: number;
 };

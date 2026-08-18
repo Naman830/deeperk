@@ -18,7 +18,11 @@ async function request<T = Record<string, unknown>>(method: string, url: string,
 
 export const apiPost = <T = Record<string, unknown>>(url: string, body?: unknown) => request<T>("POST", url, body);
 export const apiPatch = <T = Record<string, unknown>>(url: string, body?: unknown) => request<T>("PATCH", url, body);
-export const apiDelete = <T = Record<string, unknown>>(url: string) => request<T>("DELETE", url);
+// DELETE takes an optional body. Unusual, but "clear chat" and "delete chat"
+// are the same idempotent removal differing only by scope, and splitting them
+// into two routes to avoid a body would be worse.
+export const apiDelete = <T = Record<string, unknown>>(url: string, body?: unknown) =>
+  request<T>("DELETE", url, body);
 
 // Multipart — no Content-Type header, the browser must set its own boundary.
 export async function apiUpload<T = Record<string, unknown>>(url: string, form: FormData): Promise<ApiResponse<T>> {

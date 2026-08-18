@@ -9,9 +9,14 @@ import {
   pushLiveMessage,
   pushLiveMessages,
   markLiveMessageDeleted,
+  markLiveMessageHidden,
+  markLiveMessageEdited,
   clearLiveMessages,
 } from "@/lib/chat/live-store";
-import type { ChatMessage, ConversationSummary } from "@/lib/chat/types";
+import { mentionsUser } from "@/lib/chat/rich-text";
+import { getNotificationPrefs } from "@/components/features/shell/notification-prefs";
+import { apiPost, apiPatch, apiDelete } from "@/lib/api-client";
+import type { ChatMember, ChatMessage, ConversationSummary } from "@/lib/chat/types";
 import { notifyIncomingMessage, notifyAddedToConversation } from "./message-toast";
 
 /**
@@ -27,12 +32,13 @@ import { notifyIncomingMessage, notifyAddedToConversation } from "./message-toas
  *   3. Toasts, the title blink and the sound must fire while the user is in
  *      /settings or /calls.
  *
- * The outbox and drafts live here for reason (1) too: a half-typed message
- * survives clicking a search result, and an in-flight send survives navigating
- * away mid-send.
+ * The outbox, drafts and reply state live here for reason (1) too: a half-typed
+ * message survives clicking a search result, and an in-flight send survives
+ * navigating away mid-send.
  */
 
 export type SendStatus = "uploading" | "pending" | "failed";
+export type DeleteScope = "me" | "everyone";
 
 export type OutgoingMessage = {
   clientMsgId: string;
@@ -44,17 +50,35 @@ export type OutgoingMessage = {
   mediaSize: number | null;
   mediaName: string | null;
   mediaToken?: string;
+  replyToId?: string | null;
   createdAt: string;
   status: SendStatus;
   progress?: number;
   error?: string;
 };
 
+/** What the composer is quoting. Held here so it survives a route change. */
+export type ReplyTarget = {
+  messageId: string;
+  senderName: string;
+  preview: string;
+};
+
+/** What the composer is editing. Mutually exclusive with a reply target. */
+export type EditTarget = {
+  messageId: string;
+  body: string;
+};
+
+/** Per-member watermarks, for the tick states. */
+export type Receipt = { lastReadAt: string | null; lastDeliveredAt: string | null };
+
 type PresenceEntry = { isOnline: boolean; lastSeenAt: string | null };
 type TypingEntry = { username: string; expiresAt: number };
 
 type RealtimeValue = {
   viewerId: string;
+  viewerUsername: string;
   connection: "connecting" | "online" | "offline";
   conversations: ConversationSummary[];
   unreadTotal: number;
@@ -63,10 +87,25 @@ type RealtimeValue = {
   outboxFor: (conversationId: string) => OutgoingMessage[];
   draftFor: (conversationId: string) => string;
   setDraft: (conversationId: string, value: string) => void;
+  replyFor: (conversationId: string) => ReplyTarget | null;
+  setReply: (conversationId: string, target: ReplyTarget | null) => void;
+  editFor: (conversationId: string) => EditTarget | null;
+  setEdit: (conversationId: string, target: EditTarget | null) => void;
+  /** Everyone else's watermarks in this conversation, keyed by user id. */
+  receiptsFor: (conversationId: string) => Record<string, Receipt>;
+  seedReceipts: (conversationId: string, members: ChatMember[]) => void;
   sendMessage: (input: Omit<OutgoingMessage, "createdAt" | "status">) => void;
   retryMessage: (clientMsgId: string) => void;
   discardMessage: (clientMsgId: string) => void;
-  deleteMessage: (messageId: string) => Promise<string | null>;
+  /** "everyone" tombstones for the whole room; "me" hides it for this user only. */
+  deleteMessage: (messageIds: string | string[], scope: DeleteScope) => Promise<string | null>;
+  editMessage: (messageId: string, text: string) => Promise<string | null>;
+  forwardMessages: (targetConversationId: string, messageIds: string[]) => Promise<string | null>;
+  setConversationState: (
+    conversationId: string,
+    patch: { pinned?: boolean; archived?: boolean; muteMinutes?: number | null },
+  ) => Promise<string | null>;
+  clearConversation: (conversationId: string, mode: "clear" | "delete") => Promise<string | null>;
   markRead: (conversationId: string) => void;
   emitTyping: (conversationId: string, typing: boolean) => void;
   refreshConversations: () => Promise<void>;
@@ -85,10 +124,12 @@ const TYPING_TTL_MS = 5000;
 
 export function RealtimeProvider({
   viewerId,
+  viewerUsername,
   initialConversations,
   children,
 }: {
   viewerId: string;
+  viewerUsername: string;
   initialConversations: ConversationSummary[];
   children: React.ReactNode;
 }) {
@@ -111,14 +152,17 @@ export function RealtimeProvider({
   const [typing, setTyping] = useState<Record<string, Record<string, TypingEntry>>>({});
   const [outbox, setOutbox] = useState<Record<string, OutgoingMessage>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [replies, setReplies] = useState<Record<string, ReplyTarget | null>>({});
+  const [edits, setEdits] = useState<Record<string, EditTarget | null>>({});
+  const [receipts, setReceipts] = useState<Record<string, Record<string, Receipt>>>({});
 
   const socketRef = useRef<ChatSocket | null>(null);
   // Handlers read this instead of closing over props, so the listener set is
   // registered once rather than rebuilt on every render. Writing a ref inside
   // an effect body is not a setState and doesn't trip the React 19 lint rule.
-  const stateRef = useRef({ viewerId, activeConversationId, conversations });
+  const stateRef = useRef({ viewerId, viewerUsername, activeConversationId, conversations });
   useEffect(() => {
-    stateRef.current = { viewerId, activeConversationId, conversations };
+    stateRef.current = { viewerId, viewerUsername, activeConversationId, conversations };
   });
 
   const refreshConversations = useCallback(async () => {
@@ -202,6 +246,65 @@ export function RealtimeProvider({
       );
     };
 
+    // Another tab of *this* user hid a message. Never fires for anyone else —
+    // the server emits it only into the actor's own user room.
+    const onMessageHidden = ({ conversationId, messageId }: { conversationId: string; messageId: string }) => {
+      markLiveMessageHidden(conversationId, messageId);
+      // The sidebar preview is computed server-side with the same filter, so a
+      // refetch is the honest way to find out what the new last message is —
+      // the client can't know, it may be one that was never loaded.
+      void refreshConversations();
+    };
+
+    const onMessageEdited = ({
+      conversationId,
+      messageId,
+      body,
+      editedAt,
+    }: {
+      conversationId: string;
+      messageId: string;
+      body: string;
+      editedAt: string;
+    }) => {
+      markLiveMessageEdited(conversationId, messageId, body, editedAt);
+      // Patch the sidebar preview in place rather than refetching: an edit
+      // deliberately does NOT bump conversation.updatedAt (a week-old message
+      // must not jump the chat to the top), so a refetch would return the same
+      // order and cost a round trip for one string.
+      setConversations((current) =>
+        current.map((item) =>
+          item.id === conversationId && item.lastMessage?.id === messageId
+            ? { ...item, lastMessage: { ...item.lastMessage, preview: body.slice(0, 120) } }
+            : item,
+        ),
+      );
+    };
+
+    const onReadBy = ({
+      conversationId,
+      userId,
+      lastReadAt,
+    }: {
+      conversationId: string;
+      userId: string;
+      lastReadAt: string | null;
+    }) => {
+      mergeReceipt(conversationId, userId, { lastReadAt });
+    };
+
+    const onDeliveredBy = ({
+      conversationId,
+      userId,
+      lastDeliveredAt,
+    }: {
+      conversationId: string;
+      userId: string;
+      lastDeliveredAt: string | null;
+    }) => {
+      mergeReceipt(conversationId, userId, { lastDeliveredAt });
+    };
+
     const onPresenceOnline = ({ userId }: { userId: string }) => {
       setPresence((current) => ({ ...current, [userId]: { isOnline: true, lastSeenAt: null } }));
     };
@@ -250,25 +353,43 @@ export function RealtimeProvider({
       );
     };
 
+    function mergeReceipt(conversationId: string, userId: string, patch: Partial<Receipt>) {
+      setReceipts((current) => {
+        const room = current[conversationId] ?? {};
+        const existing = room[userId] ?? { lastReadAt: null, lastDeliveredAt: null };
+        return {
+          ...current,
+          [conversationId]: { ...room, [userId]: { ...existing, ...patch } },
+        };
+      });
+    }
+
     function applyIncoming(message: ChatMessage) {
-      const { viewerId: me, activeConversationId: active } = stateRef.current;
+      const { viewerId: me, viewerUsername: myHandle, activeConversationId: active } = stateRef.current;
       const mine = message.senderId === me;
-      // document.hasFocus() is the clause usually missed: a tab can be
-      // `visible` inside a window that isn't focused, and clearing the badge
-      // then would mark messages read that nobody saw.
-      const isViewing =
-        active === message.conversationId &&
-        typeof document !== "undefined" &&
-        document.visibilityState === "visible" &&
-        document.hasFocus();
+      const visible = typeof document !== "undefined" && document.visibilityState === "visible";
+
+      /**
+       * Two different questions, deliberately not the same test.
+       *
+       * `onScreen` decides whether to TOAST, and does NOT consult
+       * document.hasFocus(): if the thread is open and the tab is visible, a
+       * popup about the message you are looking at is pure noise even when the
+       * window sits behind another. That was the owner's actual complaint.
+       *
+       * `focused` decides whether to MARK READ, and must keep hasFocus() —
+       * silently marking messages read that nobody looked at is worse than a
+       * missing toast, and is not undoable.
+       */
+      const onScreen = active === message.conversationId && visible;
+      const focused = onScreen && typeof document !== "undefined" && document.hasFocus();
 
       // A conversation we don't know about yet (just added to a group) —
       // refetch rather than drop it. Checked against stateRef out here rather
       // than inside the updater: updaters must stay pure (StrictMode
       // double-invokes them), so no fetch may start from within one.
-      if (!stateRef.current.conversations.some((item) => item.id === message.conversationId)) {
-        void refreshConversations();
-      }
+      const known = stateRef.current.conversations.find((item) => item.id === message.conversationId);
+      if (!known) void refreshConversations();
 
       setConversations((current) => {
         const index = current.findIndex((item) => item.id === message.conversationId);
@@ -276,7 +397,10 @@ export function RealtimeProvider({
         const updated: ConversationSummary = {
           ...current[index],
           updatedAt: message.createdAt,
-          unreadCount: mine || isViewing ? 0 : current[index].unreadCount + 1,
+          unreadCount: mine || focused ? 0 : current[index].unreadCount + 1,
+          // A new message un-archives the conversation, WhatsApp-style. Mirrors
+          // what the server does on the next full refresh.
+          archivedAt: null,
           lastMessage: {
             id: message.id,
             senderId: message.senderId,
@@ -293,20 +417,38 @@ export function RealtimeProvider({
       // first wins, the other is a no-op.
       if (message.clientMsgId) confirmOutgoing(message.clientMsgId);
 
-      if (mine || isViewing) {
-        if (isViewing) markRead(message.conversationId);
+      // The middle tick: tell the sender it reached a real client. Only for
+      // messages that are not ours — acking our own send as "delivered to me"
+      // is meaningless.
+      if (!mine) socketRef.current?.emit("conversation:delivered", { conversationId: message.conversationId });
+
+      if (mine || onScreen) {
+        if (focused) markRead(message.conversationId);
         return;
       }
 
-      const conversation = stateRef.current.conversations.find((item) => item.id === message.conversationId);
-      notifyIncomingMessage({
-        conversationId: message.conversationId,
-        title: conversationTitle(conversation),
-        preview: previewOf(message),
-        onOpen: () => router.push(`/chats/${message.conversationId}`),
-      });
-      playBlip();
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      const prefs = getNotificationPrefs();
+      // A direct @mention pierces mute — the one notification people expect to
+      // arrive even from a conversation they silenced. It does NOT pierce the
+      // global "toasts off" switch, which is an explicit instruction rather
+      // than a per-conversation preference.
+      const mentioned = mentionsUser(message.body, myHandle);
+      const muted = known?.mutedUntil !== null && known?.mutedUntil !== undefined
+        ? new Date(known.mutedUntil).getTime() > Date.now()
+        : false;
+      if (muted && !mentioned) return;
+
+      if (prefs.toasts) {
+        notifyIncomingMessage({
+          conversationId: message.conversationId,
+          title: conversationTitle(known),
+          preview: previewOf(message),
+          mentioned,
+          onOpen: () => router.push(`/chats/${message.conversationId}`),
+        });
+      }
+      if (prefs.sound) playBlip();
+      if (prefs.titleBlink && typeof document !== "undefined" && document.visibilityState === "hidden") {
         startBlink(unreadTotalOf(stateRef.current.conversations) + 1);
       }
     }
@@ -316,6 +458,10 @@ export function RealtimeProvider({
     socket.on("connect_error", onConnectError);
     socket.on("message:new", onMessageNew);
     socket.on("message:deleted", onMessageDeleted);
+    socket.on("message:hidden", onMessageHidden);
+    socket.on("message:edited", onMessageEdited);
+    socket.on("conversation:read-by", onReadBy);
+    socket.on("conversation:delivered", onDeliveredBy);
     socket.on("presence:online", onPresenceOnline);
     socket.on("presence:offline", onPresenceOffline);
     socket.on("typing:start", onTypingStart);
@@ -323,6 +469,7 @@ export function RealtimeProvider({
     socket.on("conversation:added", onConversationAdded);
     socket.on("conversation:removed", onConversationChanged);
     socket.on("conversation:updated", onConversationChanged);
+    socket.on("conversation:self-changed", onConversationChanged);
     socket.on("conversation:read-sync", onReadSync);
 
     if (socket.connected) onConnect();
@@ -333,6 +480,10 @@ export function RealtimeProvider({
       socket.off("connect_error", onConnectError);
       socket.off("message:new", onMessageNew);
       socket.off("message:deleted", onMessageDeleted);
+      socket.off("message:hidden", onMessageHidden);
+      socket.off("message:edited", onMessageEdited);
+        socket.off("conversation:read-by", onReadBy);
+      socket.off("conversation:delivered", onDeliveredBy);
       socket.off("presence:online", onPresenceOnline);
       socket.off("presence:offline", onPresenceOffline);
       socket.off("typing:start", onTypingStart);
@@ -340,6 +491,7 @@ export function RealtimeProvider({
       socket.off("conversation:added", onConversationAdded);
       socket.off("conversation:removed", onConversationChanged);
       socket.off("conversation:updated", onConversationChanged);
+      socket.off("conversation:self-changed", onConversationChanged);
       socket.off("conversation:read-sync", onReadSync);
       releaseSocket();
     };
@@ -417,6 +569,7 @@ export function RealtimeProvider({
             type: entry.type,
             text: entry.body ?? undefined,
             mediaToken: entry.mediaToken,
+            replyToId: entry.replyToId ?? undefined,
           },
           (timeoutError: Error | null, response?: { ok: boolean; error?: string; message?: ChatMessage }) => {
             if (timeoutError || !response?.ok) {
@@ -464,18 +617,135 @@ export function RealtimeProvider({
     });
   }, []);
 
-  const deleteMessage = useCallback(async (messageId: string): Promise<string | null> => {
+  const deleteMessage = useCallback(
+    async (messageIds: string | string[], scope: DeleteScope): Promise<string | null> => {
+      const socket = socketRef.current;
+      if (!socket) return "You're offline";
+      const ids = Array.isArray(messageIds) ? messageIds : [messageIds];
+      if (ids.length === 0) return null;
+      const event = scope === "me" ? "message:delete-for-me" : "message:delete";
+      return new Promise((resolve) => {
+        socket
+          .timeout(SEND_TIMEOUT_MS)
+          .emit(
+            event,
+            // Both keys, always. The server reads messageIds when present and
+            // falls back to messageId, so this one payload satisfies the old
+            // and new shapes at once.
+            { messageId: ids[0], messageIds: ids },
+            (
+              timeoutError: Error | null,
+              response?: { ok: boolean; error?: string; conversationId?: string; messageIds?: string[] },
+            ) => {
+              if (timeoutError || !response?.ok) {
+                resolve(response?.error ?? (scope === "me" ? "Couldn't remove that" : "Couldn't delete that"));
+                return;
+              }
+              // "everyone" is echoed back to the whole room, so that path updates
+              // itself. A hide reaches only this user's *other* tabs, so the
+              // acting socket is the one that has to apply it locally — hence the
+              // conversationId in the ack.
+              if (scope === "me" && response.conversationId) {
+                for (const id of response.messageIds ?? ids) {
+                  markLiveMessageHidden(response.conversationId, id);
+                }
+                void refreshConversations();
+              }
+              resolve(null);
+            },
+          );
+      });
+    },
+    [refreshConversations],
+  );
+
+  const editMessage = useCallback(async (messageId: string, text: string): Promise<string | null> => {
     const socket = socketRef.current;
     if (!socket) return "You're offline";
     return new Promise((resolve) => {
       socket
         .timeout(SEND_TIMEOUT_MS)
-        .emit("message:delete", { messageId }, (timeoutError: Error | null, response?: { ok: boolean; error?: string }) => {
-          if (timeoutError || !response?.ok) resolve(response?.error ?? "Couldn't delete that");
-          else resolve(null);
-        });
+        .emit(
+          "message:edit",
+          { messageId, text },
+          (
+            timeoutError: Error | null,
+            response?: { ok: boolean; error?: string; conversationId?: string; body?: string; editedAt?: string },
+          ) => {
+            if (timeoutError || !response?.ok) {
+              resolve(response?.error ?? "Couldn't save that edit");
+              return;
+            }
+            // The edit IS broadcast to the whole room including this socket, so
+            // this local apply is belt and braces — markLiveMessageEdited is
+            // idempotent, and it makes the change land instantly rather than at
+            // network latency.
+            if (response.conversationId && response.body && response.editedAt) {
+              markLiveMessageEdited(response.conversationId, messageId, response.body, response.editedAt);
+            }
+            resolve(null);
+          },
+        );
     });
   }, []);
+
+  const forwardMessages = useCallback(
+    async (targetConversationId: string, messageIds: string[]): Promise<string | null> => {
+      const result = await apiPost<{ success: boolean }>(
+        `/api/conversations/${targetConversationId}/forward`,
+        { messageIds },
+      );
+      if (!result.ok) return result.data.error ?? "Couldn't forward that";
+      await refreshConversations();
+      return null;
+    },
+    [refreshConversations],
+  );
+
+  const setConversationState = useCallback<RealtimeValue["setConversationState"]>(
+    async (conversationId, patch) => {
+      const result = await apiPatch<{
+        pinnedAt: string | null;
+        mutedUntil: string | null;
+        archivedAt: string | null;
+      }>(`/api/conversations/${conversationId}/state`, patch);
+      if (!result.ok) return result.data.error ?? "Couldn't update that";
+      // Patched in place, not refetched: the server answered with the three new
+      // values, and a full sidebar rebuild for a pin toggle is four queries for
+      // information already in hand.
+      setConversations((current) =>
+        current.map((item) =>
+          item.id === conversationId
+            ? {
+                ...item,
+                pinnedAt: result.data.pinnedAt,
+                mutedUntil: result.data.mutedUntil,
+                archivedAt: result.data.archivedAt,
+              }
+            : item,
+        ),
+      );
+      // Pinning changes the ORDER, which the patch above cannot do correctly —
+      // the server merges pinned rows ahead of the keyset page. So this one
+      // does need a refetch, deliberately after the optimistic patch so the
+      // switch flips instantly.
+      if (patch.pinned !== undefined) void refreshConversations();
+      return null;
+    },
+    [refreshConversations],
+  );
+
+  const clearConversation = useCallback<RealtimeValue["clearConversation"]>(
+    async (conversationId, mode) => {
+      const result = await apiDelete<{ success: boolean }>(`/api/conversations/${conversationId}`, { mode });
+      if (!result.ok) return result.data.error ?? "Couldn't do that";
+      // Both modes change what history exists, so the sidebar has to come from
+      // the server — the client cannot know what the new last message is.
+      await refreshConversations();
+      return null;
+    },
+    [refreshConversations],
+  );
 
   const emitTyping = useCallback((conversationId: string, isTyping: boolean) => {
     socketRef.current?.emit(isTyping ? "typing:start" : "typing:stop", { conversationId });
@@ -483,6 +753,39 @@ export function RealtimeProvider({
 
   const setDraft = useCallback((conversationId: string, value: string) => {
     setDrafts((current) => ({ ...current, [conversationId]: value }));
+  }, []);
+
+  const setReply = useCallback((conversationId: string, target: ReplyTarget | null) => {
+    setReplies((current) => ({ ...current, [conversationId]: target }));
+    // Replying to something while an edit is open is contradictory — the
+    // composer can only be doing one of the two.
+    if (target) setEdits((current) => ({ ...current, [conversationId]: null }));
+  }, []);
+
+  const setEdit = useCallback((conversationId: string, target: EditTarget | null) => {
+    setEdits((current) => ({ ...current, [conversationId]: target }));
+    if (target) setReplies((current) => ({ ...current, [conversationId]: null }));
+  }, []);
+
+  const seedReceipts = useCallback((conversationId: string, members: ChatMember[]) => {
+    setReceipts((current) => {
+      const room: Record<string, Receipt> = {};
+      for (const member of members) {
+        // Key presence, not truthiness: a member whose privacy hides their
+        // presence has no lastReadAt key at all, and must get no entry here —
+        // an entry of nulls would render as "sent but never delivered", which
+        // is a claim rather than an absence.
+        if (!("lastReadAt" in member)) continue;
+        room[member.id] = {
+          lastReadAt: member.lastReadAt ?? null,
+          lastDeliveredAt: member.lastDeliveredAt ?? null,
+        };
+      }
+      // Merged under whatever the socket has already reported, so a receipt
+      // that arrived before the thread mounted is not overwritten by the
+      // server's older snapshot.
+      return { ...current, [conversationId]: { ...room, ...(current[conversationId] ?? {}) } };
+    });
   }, []);
 
   useEffect(() => {
@@ -494,6 +797,7 @@ export function RealtimeProvider({
   const value = useMemo<RealtimeValue>(
     () => ({
       viewerId,
+      viewerUsername,
       connection,
       conversations,
       unreadTotal,
@@ -509,16 +813,27 @@ export function RealtimeProvider({
         Object.values(outbox).filter((entry) => entry.conversationId === conversationId),
       draftFor: (conversationId) => drafts[conversationId] ?? "",
       setDraft,
+      replyFor: (conversationId) => replies[conversationId] ?? null,
+      setReply,
+      editFor: (conversationId) => edits[conversationId] ?? null,
+      setEdit,
+      receiptsFor: (conversationId) => receipts[conversationId] ?? EMPTY_RECEIPTS,
+      seedReceipts,
       sendMessage,
       retryMessage,
       discardMessage,
       deleteMessage,
+      editMessage,
+      forwardMessages,
+      setConversationState,
+      clearConversation,
       markRead,
       emitTyping,
       refreshConversations,
     }),
     [
       viewerId,
+      viewerUsername,
       connection,
       conversations,
       unreadTotal,
@@ -526,11 +841,21 @@ export function RealtimeProvider({
       typing,
       outbox,
       drafts,
+      replies,
+      edits,
+      receipts,
       setDraft,
+      setReply,
+      setEdit,
+      seedReceipts,
       sendMessage,
       retryMessage,
       discardMessage,
       deleteMessage,
+      editMessage,
+      forwardMessages,
+      setConversationState,
+      clearConversation,
       markRead,
       emitTyping,
       refreshConversations,
@@ -539,6 +864,11 @@ export function RealtimeProvider({
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
 }
+
+// One shared object, so receiptsFor() on a conversation with no receipts yet
+// returns the same reference every render rather than a fresh {} that would
+// invalidate every memo downstream.
+const EMPTY_RECEIPTS: Record<string, Receipt> = Object.freeze({});
 
 function unreadTotalOf(conversations: ConversationSummary[]): number {
   return conversations.reduce((total, item) => total + item.unreadCount, 0);

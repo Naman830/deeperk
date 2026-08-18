@@ -5,6 +5,7 @@ import { user, privacySettings } from "../../../../../../db/schema";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { discoverableFilter } from "@/lib/profile/privacy";
+import { notBlockedWith } from "@/lib/social/block";
 import { avatarUrl } from "@/lib/avatar-url";
 import { searchQuerySchema, escapeLikePattern, SEARCH_RESULT_LIMIT } from "@/lib/validation/search";
 
@@ -47,6 +48,9 @@ export async function GET(request: Request) {
         isNull(user.deletionScheduledAt),
         // Shared with chat's DM/group gates so the three can't drift.
         discoverableFilter(),
+        // Blocking hides you from search in BOTH directions — a predicate, not
+        // a post-filter, or the LIMIT would silently return a short page.
+        notBlockedWith(userId),
       ),
     )
     .orderBy(asc(user.username))

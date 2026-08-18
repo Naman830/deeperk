@@ -130,6 +130,17 @@ export function AppRail({ defaultCollapsed, username, displayUsername, firstName
                   : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
               )}
             >
+              {/* Active indicator: a bar on the leading edge, the way Slack and
+                  Telegram mark the current section. It reads at a glance even
+                  in the collapsed rail, where the tinted background alone is a
+                  16px square that is easy to miss. Below md the rail is a
+                  bottom tab bar, so the bar moves to the top edge. */}
+              {active && (
+                <span
+                  aria-hidden
+                  className="bg-primary absolute inset-x-3 top-0 h-0.5 rounded-full md:inset-x-auto md:inset-y-1.5 md:left-0 md:h-auto md:w-0.5"
+                />
+              )}
               <Icon size={20} className="shrink-0" />
               <span className={cn("whitespace-nowrap", collapsed && "md:hidden")}>{label}</span>
               {/* The count when there's room for it; a dot when the label is

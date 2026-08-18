@@ -1,11 +1,23 @@
-import { and, count, desc, eq, inArray, isNull, lt, ne, sql } from "@/lib/db/drizzle-ops";
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, ne, sql } from "@/lib/db/drizzle-ops";
 import { db } from "@/lib/db";
-import { conversation, conversationMember, message, user, privacySettings } from "../../../../db/schema";
+import {
+  conversation,
+  conversationMember,
+  message,
+  messageDeletion,
+  user,
+  privacySettings,
+} from "../../../../db/schema";
 import { avatarUrl } from "@/lib/avatar-url";
 import { presenceVisible } from "@/lib/profile/privacy";
 import type { ChatUser, ConversationSummary, MessageType } from "./types";
 
 export const CONVERSATION_PAGE_SIZE = 30;
+
+// A cap, not a rule the UI enforces: pinning is unlimited in the database, this
+// just bounds how many the first page is willing to hoist. Comfortably above
+// WhatsApp's 3 and Telegram's 5.
+const MAX_PINNED = 20;
 
 /**
  * The sidebar query (Docs/chat/chat.md §2.5, §4, §6).
@@ -15,6 +27,50 @@ export const CONVERSATION_PAGE_SIZE = 30;
  * The naive shape — loop the conversations and fetch each one's last message —
  * is 1 + 3N Neon round trips for a list that renders on every page load.
  */
+/**
+ * "Delete for me" filter — the sidebar twin of notHiddenFor() in messages.ts.
+ *
+ * Both the preview and the unread count need it: without the first, a message
+ * the viewer hid keeps showing as the conversation's last line; without the
+ * second, it keeps its badge, so hiding a message would look like it did
+ * nothing at all.
+ */
+function notHiddenFor(viewerId: string) {
+  return sql`not exists (
+    select 1 from ${messageDeletion}
+    where ${messageDeletion.messageId} = ${message.id}
+      and ${messageDeletion.userId} = ${viewerId}
+  )`;
+}
+
+/**
+ * "Delete chat" — the conversation is gone from YOUR sidebar.
+ *
+ * Un-hiding is implicit and that is the whole design: the row is hidden only
+ * while nothing newer than hidden_at has arrived, so the moment the other
+ * person sends something the conversation comes back carrying just that
+ * message. No un-delete endpoint, no resurrection job, and no way for the two
+ * to disagree.
+ *
+ * Compared against conversation.updatedAt rather than a subquery on the newest
+ * message: updatedAt is stamped by every send and is already indexed and
+ * already the sort key, so this costs nothing extra.
+ */
+function notDeletedFor() {
+  return sql`(${conversationMember.hiddenAt} is null
+    or ${conversation.updatedAt} > ${conversationMember.hiddenAt})`;
+}
+
+/**
+ * "Clear chat" — the sidebar twin of notClearedFor() in messages.ts.
+ *
+ * conversation_member is already joined on both queries below, so this reads
+ * the column directly instead of repeating that file's correlated subquery.
+ */
+function notClearedForMember() {
+  return sql`${message.createdAt} > coalesce(${conversationMember.clearedAt}, '-infinity'::timestamptz)`;
+}
+
 export async function listConversations(
   userId: string,
   options: { limit?: number; before?: Date } = {},
@@ -31,19 +87,64 @@ export async function listConversations(
       updatedAt: conversation.updatedAt,
       role: conversationMember.role,
       lastReadAt: conversationMember.lastReadAt,
+      clearedAt: conversationMember.clearedAt,
+      pinnedAt: conversationMember.pinnedAt,
+      mutedUntil: conversationMember.mutedUntil,
+      archivedAt: conversationMember.archivedAt,
     })
     .from(conversationMember)
     .innerJoin(conversation, eq(conversation.id, conversationMember.conversationId))
     .where(
-      options.before
-        ? and(eq(conversationMember.userId, userId), lt(conversation.updatedAt, options.before))
-        : eq(conversationMember.userId, userId),
+      and(
+        eq(conversationMember.userId, userId),
+        options.before ? lt(conversation.updatedAt, options.before) : undefined,
+        notDeletedFor(),
+      ),
     )
     .orderBy(desc(conversation.updatedAt))
     .limit(limit + 1);
 
-  const page = rows.slice(0, limit);
-  const nextCursor = rows.length > limit ? page[page.length - 1].updatedAt.toISOString() : null;
+  const paged = rows.slice(0, limit);
+  const nextCursor = rows.length > limit ? paged[paged.length - 1]?.updatedAt.toISOString() ?? null : null;
+
+  /**
+   * Pinned conversations float to the top, and they cannot simply be sorted
+   * into the page above — pagination is a keyset on updatedAt, so a chat pinned
+   * six months ago legitimately sorts onto page 3 and would never appear at the
+   * top at all.
+   *
+   * So they are fetched separately, on the first page only, and merged in.
+   * idx_conversation_member_pinned is partial and exists for exactly this
+   * query, so it touches only rows that are actually pinned. The cursor is
+   * untouched — it still describes the unpinned stream — and the dedupe below
+   * stops a pinned chat that was already on page 1 appearing twice.
+   */
+  const pinnedRows = options.before
+    ? []
+    : await db
+        .select({
+          id: conversation.id,
+          type: conversation.type,
+          name: conversation.name,
+          avatarPublicId: conversation.avatarPublicId,
+          updatedAt: conversation.updatedAt,
+          role: conversationMember.role,
+          lastReadAt: conversationMember.lastReadAt,
+          clearedAt: conversationMember.clearedAt,
+          pinnedAt: conversationMember.pinnedAt,
+          mutedUntil: conversationMember.mutedUntil,
+          archivedAt: conversationMember.archivedAt,
+        })
+        .from(conversationMember)
+        .innerJoin(conversation, eq(conversation.id, conversationMember.conversationId))
+        .where(
+          and(eq(conversationMember.userId, userId), isNotNull(conversationMember.pinnedAt), notDeletedFor()),
+        )
+        .orderBy(desc(conversationMember.pinnedAt))
+        .limit(MAX_PINNED);
+
+  const seen = new Set(pinnedRows.map((row) => row.id));
+  const page = [...pinnedRows, ...paged.filter((row) => !seen.has(row.id))];
   if (page.length === 0) return { conversations: [], nextCursor: null };
 
   const ids = page.map((row) => row.id);
@@ -63,7 +164,17 @@ export async function listConversations(
         deletedAt: message.deletedAt,
       })
       .from(message)
-      .where(inArray(message.conversationId, ids))
+      // Joined purely to reach this viewer's cleared_at. Without it a cleared
+      // chat keeps showing its old last line in the sidebar even though opening
+      // it shows an empty thread — which reads as the clear having failed.
+      .innerJoin(
+        conversationMember,
+        and(
+          eq(conversationMember.conversationId, message.conversationId),
+          eq(conversationMember.userId, userId),
+        ),
+      )
+      .where(and(inArray(message.conversationId, ids), notHiddenFor(userId), notClearedForMember()))
       .orderBy(message.conversationId, desc(message.createdAt), desc(message.id)),
 
     // 3. Every unread count in one grouped query.
@@ -87,6 +198,12 @@ export async function listConversations(
           inArray(message.conversationId, ids),
           isNull(message.deletedAt),
           ne(message.senderId, userId), // your own send must not bump your own badge
+          notHiddenFor(userId),
+          // Both predicates, which together are the GREATEST of the two
+          // watermarks. Without the cleared one a cleared chat comes straight
+          // back with every old message counted unread — the single easiest
+          // thing to get wrong here.
+          notClearedForMember(),
           sql`${message.createdAt} > COALESCE(${conversationMember.lastReadAt}, ${conversationMember.joinedAt})`,
         ),
       )
@@ -137,6 +254,9 @@ export async function listConversations(
       lastReadAt: row.lastReadAt?.toISOString() ?? null,
       unreadCount: unreadByConversation.get(row.id) ?? 0,
       memberCount: members.length,
+      pinnedAt: row.pinnedAt?.toISOString() ?? null,
+      mutedUntil: row.mutedUntil?.toISOString() ?? null,
+      archivedAt: row.archivedAt?.toISOString() ?? null,
       lastMessage: last
         ? {
             id: last.id,

@@ -91,6 +91,42 @@ export const MEDIA_MAX_BYTES = Math.max(...Object.values(MEDIA_RULES).map((rule)
 export const HISTORY_PAGE_SIZE = 30;
 export const HISTORY_MAX_PAGE_SIZE = 50;
 
+/** The "Media, links & files" grid. Larger page than history — tiles are cheap. */
+export const MEDIA_PAGE_SIZE = 40;
+
+/**
+ * Two characters, matching people-search. Below it the query is treated as
+ * "nothing to search" and answered with an empty list and a 200, not a 400 —
+ * search.md's own posture, and the client never sends one anyway.
+ */
+export const MESSAGE_SEARCH_MIN_LENGTH = 2;
+
+/** Per-conversation state the owner can change. All optional, all independent. */
+export const conversationStateSchema = z
+  .object({
+    pinned: z.boolean(),
+    archived: z.boolean(),
+    // Minutes from now, or null to unmute. 0 is rejected rather than treated as
+    // "unmute" — the caller must say which it means.
+    muteMinutes: z.number().int().positive().max(60 * 24 * 365).nullable(),
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, "Nothing to update");
+
+/**
+ * "Clear chat" wipes your copy of the history; "delete" also drops the
+ * conversation from your sidebar. Neither touches the other person's copy —
+ * the route copy says so explicitly, because that is the one thing users get
+ * wrong about this control.
+ */
+export const clearConversationSchema = z.object({
+  mode: z.enum(["clear", "delete"]),
+});
+
+export const messageEditSchema = z.object({
+  text: messageBodySchema,
+});
+
 /**
  * Keyset cursor: "<epochMillis>.<messageId>".
  *

@@ -8,6 +8,12 @@ export type Membership = {
   type: ConversationType;
   role: MemberRole;
   lastReadAt: Date | null;
+  /** Per-member conversation state. Never visible to the other members. */
+  pinnedAt: Date | null;
+  mutedUntil: Date | null;
+  archivedAt: Date | null;
+  clearedAt: Date | null;
+  hiddenAt: Date | null;
 };
 
 /**
@@ -28,6 +34,11 @@ export async function getMembership(conversationId: string, userId: string): Pro
       type: conversation.type,
       role: conversationMember.role,
       lastReadAt: conversationMember.lastReadAt,
+      pinnedAt: conversationMember.pinnedAt,
+      mutedUntil: conversationMember.mutedUntil,
+      archivedAt: conversationMember.archivedAt,
+      clearedAt: conversationMember.clearedAt,
+      hiddenAt: conversationMember.hiddenAt,
     })
     .from(conversationMember)
     .innerJoin(conversation, eq(conversation.id, conversationMember.conversationId))

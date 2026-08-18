@@ -15,10 +15,17 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("flex flex-col items-center justify-center gap-3 px-6 py-12 text-center", className)}>
-      {icon && <span className="text-muted-foreground opacity-60">{icon}</span>}
+      {/* The icon sits in a soft plate rather than floating: a bare 28px glyph
+          at 60% opacity reads as a rendering failure on the dark ground, which
+          is precisely where empty states are most common. */}
+      {icon && (
+        <span className="bg-muted/60 text-muted-foreground grid size-14 place-items-center rounded-2xl">{icon}</span>
+      )}
       <div>
         <p className="text-sm font-medium">{title}</p>
-        {description && <p className="text-muted-foreground mx-auto mt-1 max-w-xs text-sm">{description}</p>}
+        {description && (
+          <p className="text-muted-foreground mx-auto mt-1 max-w-xs text-sm leading-relaxed">{description}</p>
+        )}
       </div>
       {action}
     </div>

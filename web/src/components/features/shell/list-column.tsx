@@ -14,8 +14,12 @@ type ListColumnProps = {
 export function ListColumn({ title, action, toolbar, className, children }: ListColumnProps) {
   return (
     <div className={cn("bg-sidebar flex h-full w-full min-w-0 flex-col md:border-r", className)}>
-      <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-4">
-        <h1 className="truncate text-base font-semibold">{title}</h1>
+      {/* h-14 matches the thread header exactly, so the two columns' top edges
+          line up. sticky + backdrop-blur keeps the title legible while the list
+          scrolls under it, which matters most on a phone where this column is
+          the whole screen. */}
+      <div className="bg-sidebar/80 sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between gap-2 px-4 backdrop-blur">
+        <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
         {action}
       </div>
       {toolbar && <div className="shrink-0 px-3 pb-3">{toolbar}</div>}

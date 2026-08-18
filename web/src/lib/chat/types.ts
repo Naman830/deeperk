@@ -28,6 +28,13 @@ export type ChatUser = {
 export type ChatMember = ChatUser & {
   role: MemberRole;
   joinedAt: string;
+  /**
+   * Read / delivery watermarks. ABSENT (not null) when the member's
+   * onlineStatus privacy hides them — branch on key presence, exactly like
+   * isOnline. Your own are always present.
+   */
+  lastReadAt?: string | null;
+  lastDeliveredAt?: string | null;
 };
 
 export type ChatMessage = {
@@ -40,9 +47,16 @@ export type ChatMessage = {
   mediaMime: string | null;
   mediaSize: number | null;
   mediaName: string | null;
+  /** Intrinsic pixel size, images only — lets a bubble reserve its aspect box. */
+  mediaWidth: number | null;
+  mediaHeight: number | null;
   callId: string | null;
   clientMsgId: string | null;
+  /** Quoted message, or null. The quoted content itself is resolved separately. */
+  replyToId: string | null;
   createdAt: string;
+  /** Non-null once the body has been edited. */
+  editedAt: string | null;
   deletedAt: string | null;
 };
 
@@ -56,6 +70,10 @@ export type ConversationSummary = {
   lastReadAt: string | null;
   unreadCount: number;
   memberCount: number;
+  /** Per-member state — yours alone, never the other members'. */
+  pinnedAt: string | null;
+  mutedUntil: string | null;
+  archivedAt: string | null;
   /** DIRECT only — the other participant. */
   otherUser?: ChatUser;
   lastMessage: {
@@ -76,6 +94,9 @@ export type ConversationDetail = {
   createdAt: string;
   role: MemberRole;
   lastReadAt: string | null;
+  pinnedAt: string | null;
+  mutedUntil: string | null;
+  archivedAt: string | null;
   members: ChatMember[];
 };
 
@@ -83,17 +104,27 @@ export const SOCKET_EVENTS = {
   // client → server
   MESSAGE_SEND: "message:send",
   MESSAGE_DELETE: "message:delete",
+  MESSAGE_DELETE_FOR_ME: "message:delete-for-me",
+  MESSAGE_EDIT: "message:edit",
   TYPING_START: "typing:start",
   TYPING_STOP: "typing:stop",
   CONVERSATION_READ: "conversation:read",
+  /** Recipient-side "it reached my client" — the middle tick. */
+  CONVERSATION_DELIVERED: "conversation:delivered",
   // server → client
   READY: "session:ready",
   MESSAGE_NEW: "message:new",
   MESSAGE_DELETED: "message:deleted",
+  /** Hidden for one user only — sent to that user's own tabs, never the room. */
+  MESSAGE_HIDDEN: "message:hidden",
+  MESSAGE_EDITED: "message:edited",
   CONVERSATION_ADDED: "conversation:added",
   CONVERSATION_REMOVED: "conversation:removed",
   CONVERSATION_UPDATED: "conversation:updated",
   CONVERSATION_READ_SYNC: "conversation:read-sync",
+  /** Someone ELSE read the conversation — the blue tick. Privacy-gated server-side. */
+  CONVERSATION_READ_BY: "conversation:read-by",
+  CONVERSATION_DELIVERED_BY: "conversation:delivered",
   PRESENCE_ONLINE: "presence:online",
   PRESENCE_OFFLINE: "presence:offline",
   CHAT_ERROR: "chat:error",

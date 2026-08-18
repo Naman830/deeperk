@@ -83,12 +83,22 @@ export async function POST(request: Request) {
 
   // Only images go anywhere near libvips. Video and raw bytes are never handed
   // to sharp at all, which is strictly safer than the avatar path.
+  // Intrinsic size, carried through the media token into message.mediaWidth /
+  // mediaHeight so a bubble can reserve the right aspect box before the image
+  // loads. metadata() was already being called and its dimensions thrown away —
+  // this costs nothing new.
+  let dimensions: { w: number; h: number } | null = null;
   if (sniffed.kind === "image") {
     try {
       const metadata = await sharp(buffer, { limitInputPixels: AVATAR_RULES.maxPixels }).metadata();
       if (metadata.format !== sniffed.format) {
         return NextResponse.json({ error: "That image couldn't be read" }, { status: 400 });
       }
+      // autoOrient, not the raw width/height: a phone photo carries an EXIF
+      // rotation, and the raw pair is pre-rotation — so a portrait shot would
+      // reserve a landscape box and the layout would jump anyway.
+      const { width, height } = metadata.autoOrient;
+      if (width && height) dimensions = { w: width, h: height };
     } catch {
       return NextResponse.json({ error: "That image couldn't be read" }, { status: 400 });
     }
@@ -129,6 +139,8 @@ export async function POST(request: Request) {
       size: file.size,
       name,
       t: MESSAGE_TYPE[sniffed.kind],
+      w: dimensions?.w,
+      h: dimensions?.h,
       exp: Date.now() + MEDIA_TOKEN_TTL_MS,
     });
   } catch (err) {

@@ -23,7 +23,12 @@ export type InternalEvent =
   | { kind: "members.removed"; conversationId: string; userIds: string[]; by: string }
   | { kind: "conversation.updated"; conversationId: string; name?: string | null; avatarUrl?: string | null }
   | { kind: "conversation.read"; conversationId: string; userId: string; lastReadAt: string | null }
-  | { kind: "message.created"; conversationId: string; message: ChatMessage };
+  | { kind: "message.created"; conversationId: string; message: ChatMessage }
+  // Something changed about ONE member's own view of a conversation — pinned,
+  // muted, archived, cleared, hidden. Fans out to that user's other tabs only,
+  // never the conversation room: the other members must not learn that you
+  // muted or deleted the chat.
+  | { kind: "conversation.self-changed"; conversationId: string; userId: string };
 
 export async function notifySocket(event: InternalEvent): Promise<void> {
   const baseUrl = process.env.SOCKET_INTERNAL_URL;
