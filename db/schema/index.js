@@ -11,6 +11,7 @@
 module.exports = {
   ...require("./auth"),
   ...require("./profile"),
+  ...require("./social"),
   ...require("./chat"),
   ...require("./call"),
 };
@@ -25,6 +26,9 @@ db/
     │
     ├── profile/
     │   └── index.js      ← profile tables
+    │
+    ├── social/
+    │   └── index.js      ← block (and, later, follow)
     │
     ├── chat/
     │   └── index.js      ← conversation, message, etc.
