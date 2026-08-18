@@ -130,5 +130,3 @@ export const signupCompleteSchema = z.object({
   birthDate: birthDateSchema,
   password: passwordSchema,
 });
-
-export type SignupCompleteInput = z.infer<typeof signupCompleteSchema>;

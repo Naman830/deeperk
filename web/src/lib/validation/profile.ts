@@ -30,8 +30,6 @@ export const updateProfileSchema = z.object({
   socialLinks: socialLinksArraySchema.optional(),
 });
 
-export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
-
 // Avatar rules per Docs/user/profile.md §4. maxPixels is our own ceiling, kept
 // under Cloudinary's per-image megapixel limit so an oversized source fails
 // here with a clear message instead of upstream.
@@ -51,5 +49,3 @@ export const updatePrivacySchema = z.object({
   onlineStatus: privacyAudienceSchema.optional(),
   profileDetails: privacyAudienceSchema.optional(),
 });
-
-export type UpdatePrivacyInput = z.infer<typeof updatePrivacySchema>;

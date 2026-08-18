@@ -61,10 +61,6 @@ export const updateMemberRoleSchema = z.object({
   role: memberRoleSchema,
 });
 
-export type StartDirectInput = z.infer<typeof startDirectSchema>;
-export type CreateGroupInput = z.infer<typeof createGroupSchema>;
-export type AddMembersInput = z.infer<typeof addMembersSchema>;
-
 // Media caps per chat.md §8. `mimes` is a courtesy list for the file picker's
 // `accept` attribute and the client-side pre-check only — the server decides
 // from magic bytes (lib/media/sniff.ts), never from the declared type.
@@ -121,10 +117,6 @@ export const conversationStateSchema = z
  */
 export const clearConversationSchema = z.object({
   mode: z.enum(["clear", "delete"]),
-});
-
-export const messageEditSchema = z.object({
-  text: messageBodySchema,
 });
 
 /**
