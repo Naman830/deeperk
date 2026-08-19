@@ -16,6 +16,37 @@ function list(value, fallback) {
 
 const webOrigins = list(process.env.WEB_ORIGIN, "http://localhost:3000");
 
+// Google STUN — the zero-config default. Enabling TURN later is config-only:
+// set ICE_SERVERS and restart (Docs/call/call.md §9).
+const DEFAULT_ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+
+function parseIceServers(raw) {
+  if (!raw) return DEFAULT_ICE_SERVERS;
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // fall through to the validation error below
+  }
+  const valid =
+    Array.isArray(parsed) &&
+    parsed.length > 0 &&
+    parsed.every((server) => server && typeof server === "object" && "urls" in server);
+  if (!valid) {
+    console.error("[socket] ICE_SERVERS must be a JSON array of {urls, ...} objects — refusing to start.");
+    console.error("[socket] A typo'd TURN config must fail loudly, not silently degrade to STUN-only.");
+    process.exit(1);
+  }
+  return parsed;
+}
+
+// Env-tunable primarily so e2e can exercise the timer paths.
+function clampMs(raw, fallback) {
+  const n = Number(raw);
+  if (!raw || Number.isNaN(n)) return fallback;
+  return Math.max(1000, n);
+}
+
 const env = {
   // chat.md §3 names SOCKET_PORT. PORT is honoured as a fallback because most
   // hosts inject it.
@@ -32,6 +63,12 @@ const env = {
 
   INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET || "",
   MEDIA_SIGNING_SECRET: process.env.MEDIA_SIGNING_SECRET || "",
+
+  // Calls (Docs/call/call.md). Handed to clients in signaling acks.
+  ICE_SERVERS: parseIceServers(process.env.ICE_SERVERS),
+  CALL_RING_TIMEOUT_MS: clampMs(process.env.CALL_RING_TIMEOUT_MS, 30_000),
+  // Deliberately longer than the client's 8s peer grace.
+  CALL_DISCONNECT_GRACE_MS: clampMs(process.env.CALL_DISCONNECT_GRACE_MS, 15_000),
 
   // The boot-time "everyone is offline" reset is only correct when exactly one
   // socket process exists. With two, the second one's boot marks the first
