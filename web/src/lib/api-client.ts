@@ -7,11 +7,21 @@ export type ApiResponse<T = Record<string, unknown>> = {
   data: T & { error?: string };
 };
 
+// A network-level fetch rejection (connection drop, DNS) answers as
+// { ok: false, status: 0 } instead of throwing — every caller already handles
+// ok:false inline, and an escaping rejection is a silent no-op in the UI.
+const NETWORK_FAILURE = { error: "Couldn't reach the server. Check your connection and try again." };
+
 async function request<T = Record<string, unknown>>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
-  const res = await fetch(url, {
-    method,
-    ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    });
+  } catch {
+    return { ok: false, status: 0, data: NETWORK_FAILURE as ApiResponse<T>["data"] };
+  }
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
@@ -26,7 +36,12 @@ export const apiDelete = <T = Record<string, unknown>>(url: string, body?: unkno
 
 // Multipart — no Content-Type header, the browser must set its own boundary.
 export async function apiUpload<T = Record<string, unknown>>(url: string, form: FormData): Promise<ApiResponse<T>> {
-  const res = await fetch(url, { method: "POST", body: form });
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "POST", body: form });
+  } catch {
+    return { ok: false, status: 0, data: NETWORK_FAILURE as ApiResponse<T>["data"] };
+  }
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }

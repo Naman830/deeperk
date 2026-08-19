@@ -443,6 +443,9 @@ export function MessageComposer({
             size="icon-lg"
             variant="ghost"
             aria-label="Discard recording"
+            // Disabled while the send is in flight: nothing cancels the upload
+            // continuation, so a mid-upload discard would still send.
+            disabled={uploading}
             onClick={discardTake}
             className="size-10 shrink-0 rounded-full md:size-9"
           >

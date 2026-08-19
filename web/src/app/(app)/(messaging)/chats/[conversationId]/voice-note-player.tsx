@@ -55,10 +55,10 @@ export function VoiceNotePlayer({
     if (audio.paused) {
       if (activeAudio && activeAudio !== audio) activeAudio.pause();
       activeAudio = audio;
-      void audio.play().catch(() => {
-        setPlaying(false);
-        setFailed(true);
-      });
+      // No setFailed here: pause() during a pending play() rejects it with a
+      // routine AbortError (second tap, or another note pausing this one) —
+      // real load failures reach the onError handlers below instead.
+      void audio.play().catch(() => setPlaying(false));
     } else {
       audio.pause();
     }
