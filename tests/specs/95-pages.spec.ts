@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { config } from "../src/env";
+import { db, schema } from "../src/db";
 import { createUser, createDirect, type FixtureUser } from "../src/fixtures";
 
 /**
@@ -11,7 +12,9 @@ import { createUser, createDirect, type FixtureUser } from "../src/fixtures";
 
 let viewer: FixtureUser;
 let other: FixtureUser;
+let stranger: FixtureUser;
 let conversationId: string;
+let callId: string;
 
 async function page(path: string, withSession: boolean) {
   const headers: Record<string, string> = { accept: "text/html" };
@@ -23,7 +26,28 @@ describe("pages", () => {
   beforeAll(async () => {
     viewer = await createUser("pgv");
     other = await createUser("pgo");
+    stranger = await createUser("pgs");
     conversationId = await createDirect(viewer, other);
+
+    // A finished call for the /calls/[id] page, inserted directly — the page
+    // renders from DB state alone. Explicit Dates, answered 5s in.
+    callId = crypto.randomUUID();
+    const startedAt = new Date(Date.now() - 10 * 60 * 1000);
+    const answeredAt = new Date(startedAt.getTime() + 5 * 1000);
+    const endedAt = new Date(startedAt.getTime() + 4 * 60 * 1000);
+    await db.insert(schema.call).values({
+      id: callId,
+      conversationId,
+      startedById: viewer.userId,
+      kind: "AUDIO",
+      status: "ENDED",
+      startedAt,
+      endedAt,
+    });
+    await db.insert(schema.callParticipant).values([
+      { callId, userId: viewer.userId, joinedAt: startedAt, leftAt: endedAt },
+      { callId, userId: other.userId, joinedAt: answeredAt, leftAt: endedAt },
+    ]);
   });
 
   it.each(["/login", "/login/forgot-password", "/signup"])("%s renders publicly", async (path) => {
@@ -77,6 +101,29 @@ describe("pages", () => {
   it("missing profile is a HARD 404 (the loading.tsx downgrade canary)", async () => {
     const res = await page("/u/zz.e2e.nosuchuser", true);
     expect(res.status).toBe(404);
+  });
+
+  it("the call detail page renders for a conversation member", async () => {
+    const res = await page(`/calls/${callId}`, true);
+    expect(res.status).toBe(200);
+    // The §2.5 wording path (callStatusText → callBubbleText) actually ran.
+    expect(await res.text()).toContain("Call ended");
+  });
+
+  it("call detail is a HARD 404 for non-members and unknown ids alike", async () => {
+    // Same canary as /u/<missing>: a stray loading.tsx under calls/[id] would
+    // stream this as a 200. Identical body for both cases — membership can't
+    // be probed by status code or copy.
+    const asStranger = await fetch(config.webUrl + `/calls/${callId}`, {
+      headers: { accept: "text/html", cookie: stranger.api.cookieHeader() },
+      redirect: "manual",
+    });
+    expect(asStranger.status).toBe(404);
+    expect(await asStranger.text()).toContain("Call not found");
+
+    const bogus = await page(`/calls/${crypto.randomUUID()}`, true);
+    expect(bogus.status).toBe(404);
+    expect(await bogus.text()).toContain("Call not found");
   });
 
   it("missing conversation and unknown routes 404", async () => {
