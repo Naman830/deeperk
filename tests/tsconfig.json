@@ -1,8 +1,13 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    // Two specs reach into web/src (85 via the alias, 90 relatively) — mirror
+    // web/tsconfig.json's jsx + alias so `tsc -p tests` checks what vitest runs.
+    "jsx": "react-jsx",
+    "paths": { "@/*": ["../web/src/*"] },
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
