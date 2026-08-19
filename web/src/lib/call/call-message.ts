@@ -3,7 +3,7 @@ import type { CallKind, CallLiveStatus, CallTerminalStatus } from "./types";
 /**
  * CALL bubble wording (Docs/call/call.md §2.5). The server writes a compact
  * JSON body once, at call end; the per-viewer wording (caller vs others) is
- * derived here from body + senderId === viewerId, so the 17-field wire
+ * derived here from body + senderId === viewerId, so the 18-field wire
  * contract never grows a viewer-dependent field.
  */
 

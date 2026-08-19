@@ -24,7 +24,7 @@ import {
 const RING_TIMEOUT_MS = Number(process.env.CALL_RING_TIMEOUT_MS ?? 30_000);
 const GRACE_MS = Number(process.env.CALL_DISCONNECT_GRACE_MS ?? 15_000);
 
-/** Same 17 sorted fields 00-contracts pins for serialize()/toChatMessage. */
+/** Same 18 sorted fields 00-contracts pins for serialize()/toChatMessage. */
 const MESSAGE_FIELDS = [
   "body",
   "callId",
@@ -34,6 +34,7 @@ const MESSAGE_FIELDS = [
   "deletedAt",
   "editedAt",
   "id",
+  "mediaDurationMs",
   "mediaHeight",
   "mediaMime",
   "mediaName",
@@ -195,7 +196,7 @@ describe("socket calls", () => {
       await selfSilence;
     });
 
-    it("leave ends the DIRECT call: ENDED event, 17-field CALL bubble, DB rows", async () => {
+    it("leave ends the DIRECT call: ENDED event, 18-field CALL bubble, DB rows", async () => {
       const endedP = waitFor<EndedPayload>(calTab.socket, "call:ended", (p) => p.callId === callId);
       const bubbleP = waitFor<MessageNew>(calTab.socket, "message:new", (p) => p.message?.callId === callId);
 

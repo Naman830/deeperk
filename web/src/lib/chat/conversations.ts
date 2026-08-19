@@ -328,6 +328,8 @@ export function messagePreview(row: {
       return "Video";
     case "FILE":
       return row.mediaName ?? "File";
+    case "AUDIO":
+      return "Voice message";
     case "CALL":
       // Viewer-neutral wording (matches previewOf in realtime-provider). Null-safe: "Call".
       return callPreviewText(parseCallBody(row.body));

@@ -27,12 +27,26 @@ const ENVELOPE_SLACK = 64 * 1024; // multipart boundary + headers on top of the 
 const RESOURCE_TYPE: Record<string, CloudinaryResourceType> = {
   image: "image",
   video: "video",
+  // Audio is Cloudinary's resource_type "video", not "raw" — that's what makes
+  // it probe the bytes and hand back the duration the voice bubble depends on.
+  audio: "video",
   file: "raw",
 };
 
-const MESSAGE_TYPE = { image: "IMAGE", video: "VIDEO", file: "FILE" } as const;
+const MESSAGE_TYPE = { image: "IMAGE", video: "VIDEO", audio: "AUDIO", file: "FILE" } as const;
 
-const SIZE_LABEL = { image: "5MB", video: "20MB", file: "10MB" } as const;
+const SIZE_LABEL = { image: "5MB", video: "20MB", audio: "5MB", file: "10MB" } as const;
+
+// Magic bytes cannot tell an audio-only webm/mp4 from a video in the same
+// container, so a voice note declares itself via the `voice` form field and
+// this map re-types the sniffed container. Allowlist: anything else marked
+// voice (an image, a pdf) is rejected, and the worst a lie achieves is a video
+// rendering inside an audio player — its soundtrack plays, nothing else.
+const VOICE_MIME: Record<string, string> = {
+  webm: "audio/webm",
+  mp4: "audio/mp4",
+  ogg: "audio/ogg",
+};
 
 export async function POST(request: Request) {
   const session = await getSession();
@@ -71,9 +85,19 @@ export async function POST(request: Request) {
   if (!membership) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const sniffed = sniffMedia(buffer);
+  let sniffed = sniffMedia(buffer);
   if (!sniffed) {
     return NextResponse.json({ error: "That file type isn't supported" }, { status: 400 });
+  }
+
+  // Voice-note intent — see VOICE_MIME above. Sniff still ran first: the
+  // reclassification only ever narrows an already-allowlisted container.
+  if (form?.get("voice") === "1") {
+    const voiceMime = sniffed.kind === "audio" ? sniffed.mime : VOICE_MIME[sniffed.format];
+    if (!voiceMime) {
+      return NextResponse.json({ error: "That recording format isn't supported" }, { status: 400 });
+    }
+    sniffed = { kind: "audio", format: sniffed.format, mime: voiceMime };
   }
 
   const rules = MEDIA_RULES[sniffed.kind];
@@ -104,7 +128,7 @@ export async function POST(request: Request) {
     }
   }
 
-  let uploaded: { publicId: string; url: string };
+  let uploaded: { publicId: string; url: string; durationMs: number | null };
   try {
     uploaded = await uploadAsset(buffer, {
       folder: CHAT_MEDIA_FOLDER,
@@ -128,6 +152,10 @@ export async function POST(request: Request) {
   // Attacker-controlled: capped, and rendered as text by the client, never as markup.
   const name = (file.name || "file").slice(0, 120);
 
+  // Voice notes only. Cloudinary's probe, not the client's stopwatch — and
+  // deliberately not stored for VIDEO, where nothing renders it yet.
+  const durationMs = sniffed.kind === "audio" ? uploaded.durationMs : null;
+
   let mediaToken: string;
   try {
     mediaToken = signMediaToken({
@@ -141,6 +169,7 @@ export async function POST(request: Request) {
       t: MESSAGE_TYPE[sniffed.kind],
       w: dimensions?.w,
       h: dimensions?.h,
+      d: durationMs ?? undefined,
       exp: Date.now() + MEDIA_TOKEN_TTL_MS,
     });
   } catch (err) {
@@ -157,6 +186,7 @@ export async function POST(request: Request) {
       mediaMime: sniffed.mime,
       mediaSize: file.size,
       mediaName: name,
+      mediaDurationMs: durationMs,
       // The only field message:send actually trusts.
       mediaToken,
     },

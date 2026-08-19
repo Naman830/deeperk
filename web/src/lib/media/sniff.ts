@@ -26,7 +26,23 @@ export type SniffResult = {
 
 // ISO base media brands we accept. Anything else with an ftyp box is refused
 // rather than passed to Cloudinary to identify for us.
-const ISO_BRANDS = new Set(["isom", "iso2", "iso4", "iso5", "iso6", "mp41", "mp42", "mp4v", "avc1", "qt  ", "M4V "]);
+// "M4A " is audio-only MP4 — some Safari MediaRecorder builds stamp it on a
+// voice recording. It still sniffs as kind "video" here (the container can't
+// say which it holds); the upload route's `voice` intent is what reclassifies.
+const ISO_BRANDS = new Set([
+  "isom",
+  "iso2",
+  "iso4",
+  "iso5",
+  "iso6",
+  "mp41",
+  "mp42",
+  "mp4v",
+  "avc1",
+  "qt  ",
+  "M4V ",
+  "M4A ",
+]);
 
 function startsWith(buffer: Buffer, bytes: number[]): boolean {
   if (buffer.length < bytes.length) return false;
@@ -61,6 +77,15 @@ export function sniffMedia(buffer: Buffer): SniffResult | null {
       };
     }
     return null;
+  }
+
+  // --- audio ---
+  // Only unambiguous audio containers get the kind directly. A voice note
+  // recorded as audio/webm (Chrome/Firefox) or audio/mp4 (Safari) is
+  // byte-indistinguishable from a video in the same container, so those are
+  // reclassified by the upload route's explicit `voice` intent instead.
+  if (buffer.subarray(0, 4).toString("ascii") === "OggS") {
+    return { kind: "audio", format: "ogg", mime: "audio/ogg" };
   }
 
   // --- generic files ---

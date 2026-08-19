@@ -67,6 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       mediaName: message.mediaName,
       mediaWidth: message.mediaWidth,
       mediaHeight: message.mediaHeight,
+      mediaDurationMs: message.mediaDurationMs,
       createdAt: message.createdAt,
     })
     .from(message)
@@ -84,7 +85,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // SYSTEM and CALL bubbles are server-authored notices about a specific
         // conversation. Forwarding one would place "Alice removed Bob" into a
         // group where neither of them is a member.
-        inArray(message.type, ["TEXT", "IMAGE", "VIDEO", "FILE"]),
+        inArray(message.type, ["TEXT", "IMAGE", "VIDEO", "FILE", "AUDIO"]),
       ),
     )
     .orderBy(message.createdAt);
@@ -104,6 +105,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     mediaName: source.mediaName,
     mediaWidth: source.mediaWidth,
     mediaHeight: source.mediaHeight,
+    mediaDurationMs: source.mediaDurationMs,
     // No clientMsgId: these are not optimistic sends, so there is no bubble
     // waiting to be reconciled and nothing for the retry unique index to catch.
   }));

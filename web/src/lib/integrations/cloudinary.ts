@@ -57,7 +57,7 @@ type UploadOptions = {
 export async function uploadAsset(
   buffer: Buffer,
   options: UploadOptions,
-): Promise<{ publicId: string; url: string }> {
+): Promise<{ publicId: string; url: string; durationMs: number | null }> {
   const client = getCloudinary();
   const resourceType = options.resourceType ?? "image";
   // Entirely server-generated: no filename, no user input, so no path traversal.
@@ -86,7 +86,16 @@ export async function uploadAsset(
 
   // Store what Cloudinary actually assigned, never a locally rebuilt string —
   // in dynamic-folder-mode accounts the two differ.
-  return { publicId: result.public_id, url: result.secure_url };
+  // `duration` (seconds, float) is Cloudinary's own probe of video-resource
+  // uploads — the trusted source for a voice note's length, since the server
+  // never decodes media bytes itself. Null for images/raw and on the rare
+  // probe miss.
+  const duration = (result as UploadApiResponse & { duration?: number }).duration;
+  return {
+    publicId: result.public_id,
+    url: result.secure_url,
+    durationMs: typeof duration === "number" && Number.isFinite(duration) ? Math.round(duration * 1000) : null,
+  };
 }
 
 /** Back-compat wrapper for the avatar route, which only ever uploads images. */

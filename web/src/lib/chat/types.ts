@@ -5,11 +5,11 @@
 
 export type ConversationType = "DIRECT" | "GROUP";
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
-export type MessageType = "TEXT" | "IMAGE" | "VIDEO" | "FILE" | "SYSTEM" | "CALL";
+export type MessageType = "TEXT" | "IMAGE" | "VIDEO" | "FILE" | "AUDIO" | "SYSTEM" | "CALL";
 
 /** Only these can arrive from a client. SYSTEM and CALL are server-authored:
  *  accepting them would let any member forge "Alice removed Bob". */
-export const SENDABLE_MESSAGE_TYPES = ["TEXT", "IMAGE", "VIDEO", "FILE"] as const;
+export const SENDABLE_MESSAGE_TYPES = ["TEXT", "IMAGE", "VIDEO", "FILE", "AUDIO"] as const;
 export type SendableMessageType = (typeof SENDABLE_MESSAGE_TYPES)[number];
 
 export type ChatUser = {
@@ -50,6 +50,9 @@ export type ChatMessage = {
   /** Intrinsic pixel size, images only — lets a bubble reserve its aspect box. */
   mediaWidth: number | null;
   mediaHeight: number | null;
+  /** AUDIO (voice notes) only — Chrome-recorded webm reports Infinity from the
+   *  element, so the player's total time depends on this. */
+  mediaDurationMs: number | null;
   callId: string | null;
   clientMsgId: string | null;
   /** Quoted message, or null. The quoted content itself is resolved separately. */

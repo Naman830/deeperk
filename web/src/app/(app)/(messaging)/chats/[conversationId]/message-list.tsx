@@ -292,6 +292,8 @@ function previewOf(message: ChatMessage): string {
       return "Video";
     case "FILE":
       return message.mediaName ?? "File";
+    case "AUDIO":
+      return "Voice message";
     default:
       return (message.body ?? "").slice(0, 100);
   }

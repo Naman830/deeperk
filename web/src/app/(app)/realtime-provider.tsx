@@ -45,12 +45,14 @@ export type DeleteScope = "me" | "everyone";
 export type OutgoingMessage = {
   clientMsgId: string;
   conversationId: string;
-  type: "TEXT" | "IMAGE" | "VIDEO" | "FILE";
+  type: "TEXT" | "IMAGE" | "VIDEO" | "FILE" | "AUDIO";
   body: string | null;
   mediaUrl: string | null;
   mediaMime: string | null;
   mediaSize: number | null;
   mediaName: string | null;
+  /** Voice notes — lets the optimistic bubble show a total before the echo. */
+  mediaDurationMs?: number | null;
   mediaToken?: string;
   replyToId?: string | null;
   createdAt: string;
@@ -881,6 +883,8 @@ function previewOf(message: ChatMessage): string {
       return "Video";
     case "FILE":
       return message.mediaName ?? "File";
+    case "AUDIO":
+      return "Voice message";
     case "CALL":
       // Viewer-neutral wording — a preview has no viewer role. Null-safe: "Call".
       return callPreviewText(parseCallBody(message.body));

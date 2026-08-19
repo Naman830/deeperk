@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { ChatMember, ChatMessage } from "@/lib/chat/types";
 import type { DeleteScope, EditTarget, ReplyTarget } from "../../../realtime-provider";
 import { MessageActions } from "./message-actions";
+import { VoiceNotePlayer } from "./voice-note-player";
 import { MessageMenuItems, canDeleteForEveryone, canReply } from "./message-menu-items";
 import { DeleteMessageDialog } from "./delete-message-dialog";
 
@@ -427,6 +428,16 @@ function MessageBody({
           <source src={message.mediaUrl ?? ""} type={message.mediaMime ?? undefined} />
         </video>
       );
+    case "AUDIO":
+      // Fixed height, so no aspect-box reservation — but an explicit width:
+      // without one the bubble collapses to its min-w-16.
+      return (
+        <VoiceNotePlayer
+          src={message.mediaUrl ?? ""}
+          mime={message.mediaMime}
+          durationMs={message.mediaDurationMs}
+        />
+      );
     case "FILE":
       return (
         <a
@@ -466,6 +477,8 @@ function previewOf(message: ChatMessage): string {
       return "Video";
     case "FILE":
       return message.mediaName ?? "File";
+    case "AUDIO":
+      return "Voice message";
     default:
       return (message.body ?? "").slice(0, 100);
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileText, Video } from "lucide-react";
+import { FileText, Mic, Video } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -127,9 +127,15 @@ export function MediaPanel({
                       />
                     ) : (
                       <span className="text-muted-foreground flex size-full flex-col items-center justify-center gap-1 p-1">
-                        {item.type === "VIDEO" ? <Video size={20} /> : <FileText size={20} />}
+                        {item.type === "VIDEO" ? (
+                          <Video size={20} />
+                        ) : item.type === "AUDIO" ? (
+                          <Mic size={20} />
+                        ) : (
+                          <FileText size={20} />
+                        )}
                         <span className="w-full truncate text-center text-[10px]">
-                          {item.mediaName ?? item.type.toLowerCase()}
+                          {item.type === "AUDIO" ? "Voice message" : (item.mediaName ?? item.type.toLowerCase())}
                         </span>
                       </span>
                     )}

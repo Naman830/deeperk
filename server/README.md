@@ -66,7 +66,7 @@ server/src/
 - `controllers/call/index.js` clears the user's disconnect-grace timers
   **first** — a reconnect must never let a stale timer stamp them out of a call.
 - `serializeMessage()` in `controllers/shared.js` and web's `toChatMessage` must
-  emit the identical 17-field shape — pinned by `tests/specs/00-contracts.spec.ts`.
+  emit the identical 18-field shape — pinned by `tests/specs/00-contracts.spec.ts`.
 
 ## Running
 

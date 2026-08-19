@@ -175,6 +175,7 @@ export function ChatThread({
           mediaName: entry.mediaName,
           mediaWidth: null,
           mediaHeight: null,
+          mediaDurationMs: entry.mediaDurationMs ?? null,
           callId: null,
           clientMsgId: entry.clientMsgId,
           replyToId: entry.replyToId ?? null,

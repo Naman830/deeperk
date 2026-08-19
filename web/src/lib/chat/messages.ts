@@ -44,6 +44,7 @@ export function toChatMessage(row: MessageRow): ChatMessage {
     mediaName: row.mediaName,
     mediaWidth: row.mediaWidth,
     mediaHeight: row.mediaHeight,
+    mediaDurationMs: row.mediaDurationMs,
     callId: row.callId,
     clientMsgId: row.clientMsgId,
     replyToId: row.replyToId,
@@ -316,7 +317,7 @@ export async function listConversationMedia(
       and(
         visibleTo(conversationId, viewerId),
         isNull(message.deletedAt),
-        inArray(message.type, ["IMAGE", "VIDEO", "FILE"]),
+        inArray(message.type, ["IMAGE", "VIDEO", "FILE", "AUDIO"]),
         before
           ? sql`(${message.createdAt}, ${message.id}) < (${before.createdAt.toISOString()}::timestamptz, ${before.id})`
           : sql`true`,

@@ -77,9 +77,21 @@ export const MEDIA_RULES = {
     maxBytes: 10 * 1024 * 1024,
     mimes: ["application/pdf", "application/zip"],
   },
+  // Voice notes. Recorder-only in v1 — deliberately NOT in the composer's file
+  // picker ACCEPT (which lists the other three kinds explicitly), so these
+  // mimes gate nothing today; the cap is what matters. 5MB fits a 2-minute
+  // recording at any codec a MediaRecorder produces, with a wide margin.
+  audio: {
+    maxBytes: 5 * 1024 * 1024,
+    mimes: ["audio/webm", "audio/mp4", "audio/ogg"],
+  },
 } as const;
 
 export type MediaKind = keyof typeof MEDIA_RULES;
+
+/** Voice-note recording cap. The recorder auto-stops here; the upload route
+ *  cannot re-measure time from bytes, so the byte cap above is the server bound. */
+export const VOICE_NOTE_MAX_MS = 2 * 60 * 1000;
 
 /** Largest cap across kinds — the cheap `content-length` precheck before any parsing. */
 export const MEDIA_MAX_BYTES = Math.max(...Object.values(MEDIA_RULES).map((rule) => rule.maxBytes));

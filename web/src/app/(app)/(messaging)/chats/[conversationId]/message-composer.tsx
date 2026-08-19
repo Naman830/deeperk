@@ -1,15 +1,23 @@
 import { useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Paperclip, Pencil, Reply, SendHorizontal, Smile, X } from "lucide-react";
+import { Mic, Paperclip, Pencil, Reply, SendHorizontal, Smile, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserAvatar } from "@/components/features/profile/user-avatar";
 import { FormError } from "@/components/features/shell/form-error";
 import { apiUpload, GENERIC_ERROR } from "@/lib/api-client";
-import { MESSAGE_MAX_LENGTH, MEDIA_RULES, MEDIA_MAX_BYTES, type MediaKind } from "@/lib/validation/chat";
+import {
+  MESSAGE_MAX_LENGTH,
+  MEDIA_RULES,
+  MEDIA_MAX_BYTES,
+  VOICE_NOTE_MAX_MS,
+  type MediaKind,
+} from "@/lib/validation/chat";
 import { EMOJI_GROUPS } from "@/lib/chat/emoji";
 import { subscribeDrafts, getDraft, setDraft } from "@/lib/chat/draft-store";
 import { useTypingEmitter } from "@/lib/hooks/use-typing";
+import { useVoiceRecorder } from "@/lib/hooks/use-voice-recorder";
+import { formatClock } from "./voice-note-player";
 import { cn } from "@/lib/utils";
 import type { ChatMember } from "@/lib/chat/types";
 import { useRealtime } from "../../../realtime-provider";
@@ -21,7 +29,20 @@ import { useRealtime } from "../../../realtime-provider";
 
 const COUNTER_VISIBLE_FROM = MESSAGE_MAX_LENGTH - 400;
 
+// Deliberately no MEDIA_RULES.audio here — voice notes are recorder-only, and
+// a picked .mp3 would fail the sniff allowlist anyway.
 const ACCEPT = [...MEDIA_RULES.image.mimes, ...MEDIA_RULES.video.mimes, ...MEDIA_RULES.file.mimes].join(",");
+
+/** What POST /api/upload/chat-media answers with. */
+type ChatMediaUploadResponse = {
+  type: "IMAGE" | "VIDEO" | "FILE" | "AUDIO";
+  mediaUrl: string;
+  mediaMime: string;
+  mediaSize: number;
+  mediaName: string;
+  mediaDurationMs: number | null;
+  mediaToken: string;
+};
 
 /** The @token immediately before the caret, if the caret is inside one. */
 function mentionQueryAt(value: string, caret: number): { query: string; start: number } | null {
@@ -57,6 +78,7 @@ export function MessageComposer({
     editMessage,
   } = useRealtime();
   const { bump, stop } = useTypingEmitter(conversationId, emitTyping);
+  const recorder = useVoiceRecorder(VOICE_NOTE_MAX_MS);
   const counterId = useId();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -226,14 +248,7 @@ export function MessageComposer({
     const form = new FormData();
     form.append("conversationId", conversationId);
     form.append("file", file);
-    const res = await apiUpload<{
-      type: "IMAGE" | "VIDEO" | "FILE";
-      mediaUrl: string;
-      mediaMime: string;
-      mediaSize: number;
-      mediaName: string;
-      mediaToken: string;
-    }>("/api/upload/chat-media", form);
+    const res = await apiUpload<ChatMediaUploadResponse>("/api/upload/chat-media", form);
     setUploading(false);
 
     if (!res.ok) {
@@ -251,6 +266,56 @@ export function MessageComposer({
       mediaMime: res.data.mediaMime,
       mediaSize: res.data.mediaSize,
       mediaName: res.data.mediaName,
+      mediaToken: res.data.mediaToken,
+      replyToId: reply?.messageId ?? null,
+    });
+    setReply(conversationId, null);
+  }
+
+  async function startVoiceNote() {
+    setError(undefined);
+    const failure = await recorder.start();
+    if (failure) setError(failure);
+  }
+
+  async function sendVoiceNote() {
+    const recording = await recorder.finish();
+    if (!recording) return;
+    // Two deliberate taps under half a second apart is an accident, not a message.
+    if (recording.durationMs < 500) return;
+    if (recording.blob.size > MEDIA_RULES.audio.maxBytes) {
+      setError("That recording is too long to send");
+      return;
+    }
+
+    setError(undefined);
+    setUploading(true);
+    const form = new FormData();
+    form.append("conversationId", conversationId);
+    // The route can't tell an audio-only container from a video by its bytes —
+    // this is the explicit voice-note intent it re-types on.
+    form.append("voice", "1");
+    form.append("file", new File([recording.blob], "Voice message", { type: recording.mime }));
+    const res = await apiUpload<ChatMediaUploadResponse>("/api/upload/chat-media", form);
+    setUploading(false);
+
+    if (!res.ok) {
+      setError(res.data.error ?? GENERIC_ERROR);
+      return;
+    }
+
+    sendMessage({
+      clientMsgId: newClientMsgId(),
+      conversationId,
+      type: res.data.type,
+      body: null,
+      mediaUrl: res.data.mediaUrl,
+      mediaMime: res.data.mediaMime,
+      mediaSize: res.data.mediaSize,
+      mediaName: res.data.mediaName,
+      // The client's stopwatch as fallback: the optimistic bubble should show a
+      // total even if Cloudinary's probe came up empty.
+      mediaDurationMs: res.data.mediaDurationMs ?? recording.durationMs,
       mediaToken: res.data.mediaToken,
       replyToId: reply?.messageId ?? null,
     });
@@ -334,6 +399,46 @@ export function MessageComposer({
         </ul>
       )}
 
+      {/* Recording swaps the whole input row for a strip: timer, cancel, send.
+          The reply strip above stays — a voice note can be a reply. */}
+      {recorder.status !== "idle" ? (
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            size="icon-lg"
+            variant="ghost"
+            aria-label="Discard recording"
+            onClick={recorder.cancel}
+            className="size-10 shrink-0 rounded-full md:size-9"
+          >
+            <Trash2 />
+          </Button>
+          <span className="bg-muted/60 flex h-10 min-w-0 flex-1 items-center gap-2 rounded-2xl px-3 md:h-9">
+            <span
+              className={cn(
+                "bg-destructive size-2 shrink-0 rounded-full",
+                recorder.status === "recording" && "animate-pulse",
+              )}
+            />
+            <span className="text-sm tabular-nums">
+              {formatClock(recorder.elapsedMs)} / {formatClock(VOICE_NOTE_MAX_MS)}
+            </span>
+            <span role="status" className="text-muted-foreground min-w-0 truncate text-xs">
+              {recorder.status === "stopped" ? "Max length reached" : "Recording…"}
+            </span>
+          </span>
+          <Button
+            type="button"
+            size="icon-lg"
+            aria-label="Send voice message"
+            disabled={uploading}
+            onClick={() => void sendVoiceNote()}
+            className="size-10 shrink-0 rounded-full transition-transform active:scale-95 md:size-9"
+          >
+            <SendHorizontal />
+          </Button>
+        </div>
+      ) : (
       <div className="flex items-end gap-1.5">
         <input ref={fileRef} type="file" accept={ACCEPT} onChange={handleFile} className="hidden" />
         <Button
@@ -346,6 +451,18 @@ export function MessageComposer({
           className="size-10 shrink-0 rounded-full md:size-9"
         >
           <Paperclip />
+        </Button>
+
+        <Button
+          type="button"
+          size="icon-lg"
+          variant="ghost"
+          aria-label="Record a voice message"
+          disabled={uploading || !!editing}
+          onClick={() => void startVoiceNote()}
+          className="size-10 shrink-0 rounded-full md:size-9"
+        >
+          <Mic />
         </Button>
 
         <Popover>
@@ -418,6 +535,7 @@ export function MessageComposer({
           <SendHorizontal />
         </Button>
       </div>
+      )}
 
       {nearLimit && (
         <p

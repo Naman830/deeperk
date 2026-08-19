@@ -15,8 +15,8 @@ const MAX_CLIENT_MSG_ID = 64;
 // SYSTEM and CALL are missing on purpose. This reads like input validation and
 // is actually an authorization control: without it any member can forge the
 // bubble "Alice removed Bob from the group".
-const SENDABLE_TYPES = new Set(["TEXT", "IMAGE", "VIDEO", "FILE"]);
-const MEDIA_TYPES = new Set(["IMAGE", "VIDEO", "FILE"]);
+const SENDABLE_TYPES = new Set(["TEXT", "IMAGE", "VIDEO", "FILE", "AUDIO"]);
+const MEDIA_TYPES = new Set(["IMAGE", "VIDEO", "FILE", "AUDIO"]);
 
 /**
  * A reply may only quote a live message in the SAME conversation.
@@ -126,6 +126,7 @@ function registerSendHandler(io, socket) {
             mediaName: media ? media.name : null,
             mediaWidth: media && media.w ? media.w : null,
             mediaHeight: media && media.h ? media.h : null,
+            mediaDurationMs: media && media.d ? media.d : null,
             clientMsgId,
             replyToId: safeReplyToId,
           })

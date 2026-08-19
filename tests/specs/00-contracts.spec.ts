@@ -31,7 +31,7 @@ const EXPECTED_TABLES = [
   "verification",
 ];
 
-/** The 17 fields serialize() (server) and toChatMessage (web) both emit. */
+/** The 18 fields serialize() (server) and toChatMessage (web) both emit. */
 const MESSAGE_FIELDS = [
   "body",
   "callId",
@@ -41,6 +41,7 @@ const MESSAGE_FIELDS = [
   "deletedAt",
   "editedAt",
   "id",
+  "mediaDurationMs",
   "mediaHeight",
   "mediaMime",
   "mediaName",

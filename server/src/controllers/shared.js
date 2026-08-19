@@ -12,7 +12,7 @@ function fail(ack, payload) {
   if (typeof ack === "function") ack({ ok: false, ...payload });
 }
 
-// The 17-field wire shape. Two sites must stay identical — this and web's
+// The 18-field wire shape. Two sites must stay identical — this and web's
 // toChatMessage: the sorted key set is pinned by tests/specs/00-contracts.spec.ts.
 function serializeMessage(row) {
   return {
@@ -27,6 +27,7 @@ function serializeMessage(row) {
     mediaName: row.mediaName,
     mediaWidth: row.mediaWidth,
     mediaHeight: row.mediaHeight,
+    mediaDurationMs: row.mediaDurationMs,
     callId: row.callId,
     clientMsgId: row.clientMsgId,
     replyToId: row.replyToId,

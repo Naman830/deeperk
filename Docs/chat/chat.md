@@ -127,6 +127,23 @@ Pick file → client-side size/type check (courtesy only)
    → same path as §2.4 from here
 ```
 
+**Voice notes — BUILT (2026-08-19).** A fourth media kind, `AUDIO`, riding this exact
+pipeline with three deltas:
+
+- **Recorder-only.** The composer's mic button records via `MediaRecorder`
+  (tap to start; strip with timer, cancel and send; 2-minute auto-stop that keeps the
+  take sendable). There is no file-picker path to an AUDIO message — a picked `.mp3`
+  is rejected by the sniff allowlist exactly as before.
+- **The upload declares intent.** An audio-only webm/mp4 is byte-identical to a video
+  in the same container, so the recorder sends `voice: "1"` and the route re-types an
+  allowlisted A/V container to `AUDIO` + `audio/*` mime (anything else marked voice is
+  a 400). Cap 5MB. Uploaded as Cloudinary resource_type `video`, which is what probes
+  the bytes and returns the duration.
+- **`message.media_duration_ms`** stores that probed duration (never the client's
+  stopwatch) — load-bearing for playback, because Chrome's MediaRecorder writes webm
+  with no duration header and the `<audio>` element reports `Infinity`. The bubble is
+  a compact custom player (play/pause, seek, elapsed/total); one note plays at a time.
+
 ---
 
 ## 3. Realtime Server Shape

@@ -16,7 +16,9 @@ const { user } = require("../auth/user");
 const { conversation } = require("./conversation");
 const { call } = require("../call/call");
 
-// Message content type.
+// Message content type. AUDIO (voice notes) is appended last on purpose:
+// extending a live pgEnum is ALTER TYPE ... ADD VALUE, and appending is the
+// one shape of that change drizzle-kit push applies safely.
 const messageTypeEnum = pgEnum("message_type_enum", [
   "TEXT",
   "IMAGE",
@@ -24,6 +26,7 @@ const messageTypeEnum = pgEnum("message_type_enum", [
   "FILE",
   "SYSTEM",
   "CALL",
+  "AUDIO",
 ]);
 
 /*
@@ -73,6 +76,12 @@ const message = pgTable(
     mediaHeight: integer("media_height"),
     mediaSize: integer("media_size"), // bytes
     mediaName: text("media_name"),
+    // AUDIO (voice notes) only. Derived server-side from Cloudinary's probe of
+    // the uploaded asset, never from the client — and load-bearing for playback:
+    // Chrome's MediaRecorder writes webm with no duration header, so the
+    // <audio> element reports Infinity and the player needs this to show a
+    // total time at all.
+    mediaDurationMs: integer("media_duration_ms"),
 
     // Client-generated id for the optimistic bubble, echoed back on broadcast.
     // socket.io buffers emits while disconnected and flushes them on reconnect,

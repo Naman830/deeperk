@@ -28,10 +28,12 @@ export type MediaTokenPayload = {
   mime: string;
   size: number;
   name: string;
-  t: Extract<SendableMessageType, "IMAGE" | "VIDEO" | "FILE">;
+  t: Extract<SendableMessageType, "IMAGE" | "VIDEO" | "FILE" | "AUDIO">;
   /** intrinsic pixel width / height — images only, absent for video and files */
   w?: number;
   h?: number;
+  /** duration in ms — voice notes (AUDIO) only, from Cloudinary's probe */
+  d?: number;
   /** expiry, epoch ms */
   exp: number;
 };
