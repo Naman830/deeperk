@@ -6,6 +6,7 @@ const {
   removeUsersFromConversation,
 } = require("../rooms");
 const notify = require("../handlers/notify");
+const { kickFromConversationCall } = require("../handlers/call");
 
 /**
  * The web -> socket hook.
@@ -73,6 +74,10 @@ function internalRouter(getIo) {
           conversationId,
           reason: "REMOVED",
         });
+        // Removed members must not stay in the conversation's live call.
+        kickFromConversationCall(io, userIds, conversationId).catch((error) =>
+          console.error("[internal:call-kick]", error),
+        );
         removeUsersFromConversation(io, userIds, conversationId);
         notify.toConversation(io, conversationId, "conversation:updated", {
           conversationId,
