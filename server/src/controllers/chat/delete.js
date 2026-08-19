@@ -53,6 +53,7 @@ function registerDeleteHandlers(io, socket) {
           mediaName: null,
           mediaWidth: null,
           mediaHeight: null,
+          mediaDurationMs: null,
         })
         .where(and(inArray(message.id, ids), eq(message.senderId, userId)))
         .returning({

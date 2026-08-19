@@ -126,7 +126,7 @@ function registerSendHandler(io, socket) {
             mediaName: media ? media.name : null,
             mediaWidth: media && media.w ? media.w : null,
             mediaHeight: media && media.h ? media.h : null,
-            mediaDurationMs: media && media.d ? media.d : null,
+            mediaDurationMs: media && media.d != null ? media.d : null,
             clientMsgId,
             replyToId: safeReplyToId,
           })
