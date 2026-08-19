@@ -1,7 +1,7 @@
 // Shapes shared by the REST routes, the server components and the socket
 // client. The socket server (server/, CommonJS) can't import this file, so any
-// change here has a mirror over there — the event names in SOCKET_EVENTS are
-// the contract between the two.
+// change here has a mirror over there — the event names are string literals at
+// the call sites (realtime-provider.tsx ↔ server/src/controllers/).
 
 export type ConversationType = "DIRECT" | "GROUP";
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
@@ -102,45 +102,3 @@ export type ConversationDetail = {
   archivedAt: string | null;
   members: ChatMember[];
 };
-
-export const SOCKET_EVENTS = {
-  // client → server
-  MESSAGE_SEND: "message:send",
-  MESSAGE_DELETE: "message:delete",
-  MESSAGE_DELETE_FOR_ME: "message:delete-for-me",
-  MESSAGE_EDIT: "message:edit",
-  TYPING_START: "typing:start",
-  TYPING_STOP: "typing:stop",
-  CONVERSATION_READ: "conversation:read",
-  /** Recipient-side "it reached my client" — the middle tick. */
-  CONVERSATION_DELIVERED: "conversation:delivered",
-  // server → client
-  READY: "session:ready",
-  MESSAGE_NEW: "message:new",
-  MESSAGE_DELETED: "message:deleted",
-  /** Hidden for one user only — sent to that user's own tabs, never the room. */
-  MESSAGE_HIDDEN: "message:hidden",
-  MESSAGE_EDITED: "message:edited",
-  CONVERSATION_ADDED: "conversation:added",
-  CONVERSATION_REMOVED: "conversation:removed",
-  CONVERSATION_UPDATED: "conversation:updated",
-  CONVERSATION_READ_SYNC: "conversation:read-sync",
-  /** Someone ELSE read the conversation — the blue tick. Privacy-gated server-side. */
-  CONVERSATION_READ_BY: "conversation:read-by",
-  CONVERSATION_DELIVERED_BY: "conversation:delivered",
-  PRESENCE_ONLINE: "presence:online",
-  PRESENCE_OFFLINE: "presence:offline",
-  CHAT_ERROR: "chat:error",
-} as const;
-
-/** Ack codes. NOT_FOUND deliberately covers both "no such conversation" and
- *  "you're not a member", so an id can't be probed for existence. */
-export type ChatErrorCode =
-  | "UNAUTHENTICATED"
-  | "INVALID"
-  | "TOO_LONG"
-  | "NOT_FOUND"
-  | "RATE_LIMITED"
-  | "SERVER_ERROR";
-
-export type ChatAck<T> = ({ ok: true } & T) | { ok: false; code: ChatErrorCode; error: string };

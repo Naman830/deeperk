@@ -1,19 +1,11 @@
 import { z } from "zod";
 
 // Chat rules per Docs/chat/chat.md §2.3, §2.4, §7, §8. Shared between the
-// client (inline feedback before a bubble is ever created) and the server /
-// socket handlers, which never trust that the client-side check ran.
+// client (inline feedback before a bubble is ever created) and the web API
+// routes; the socket server (CommonJS) mirrors the same rules by hand — keep
+// them in step.
 
 export const MESSAGE_MAX_LENGTH = 4000;
-
-// Trimmed, because a message of only whitespace is an empty message. The
-// client blocks over-length before sending so §8's "rejected, inline error"
-// never has to arrive after an optimistic bubble already exists.
-export const messageBodySchema = z
-  .string()
-  .trim()
-  .min(1, "Type a message")
-  .max(MESSAGE_MAX_LENGTH, `Messages can be up to ${MESSAGE_MAX_LENGTH} characters`);
 
 export const GROUP_NAME_MAX = 50;
 export const GROUP_MIN_MEMBERS = 2; // including the creator
