@@ -9,6 +9,7 @@ import {
   privacySettings,
 } from "../../../../db/schema";
 import { avatarUrl } from "@/lib/avatar-url";
+import { callPreviewText, parseCallBody } from "@/lib/call/call-message";
 import { presenceVisible } from "@/lib/profile/privacy";
 import type { ChatUser, ConversationSummary, MessageType } from "./types";
 
@@ -328,7 +329,8 @@ export function messagePreview(row: {
     case "FILE":
       return row.mediaName ?? "File";
     case "CALL":
-      return "Call";
+      // Viewer-neutral wording (matches previewOf in realtime-provider). Null-safe: "Call".
+      return callPreviewText(parseCallBody(row.body));
     default:
       return (row.body ?? "").slice(0, PREVIEW_MAX);
   }

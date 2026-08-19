@@ -1,51 +1,32 @@
+import { getAudioContext, primeAudioContext, resumeAudioContext } from "./audio-context";
+
 /**
- * The notification sound (Docs/chat/chat.md §6), synthesised rather than shipped
- * as a binary asset.
+ * The notification sound (Docs/chat/chat.md §6), synthesised rather than
+ * shipped as a binary asset.
  *
- * chat.md doesn't anticipate the constraint that governs this: **there is no
- * permission API for audio.** An AudioContext created before any user gesture
- * starts `suspended`, and on iOS it must be *constructed* during the gesture,
- * not merely resumed. So the very first notification in a freshly loaded tab
- * nobody has clicked is silent, always, on every browser. That's platform
- * policy, not a bug — hence a silent no-op rather than a thrown error or a
- * console warning about something the user cannot act on.
+ * The AudioContext itself lives in audio-context.ts, shared with the call
+ * ringtone; these thin delegates keep the public API stable so
+ * realtime-provider's priming listeners now unlock both sounds. The
+ * first-notification-is-silent constraint documented there applies here too.
  */
 
-type Ctor = typeof AudioContext;
-
-let context: AudioContext | null = null;
 let lastPlayedAt = 0;
 
 const THROTTLE_MS = 2000; // a group burst must not machine-gun
 
-function getConstructor(): Ctor | null {
-  if (typeof window === "undefined") return null;
-  return window.AudioContext ?? (window as unknown as { webkitAudioContext?: Ctor }).webkitAudioContext ?? null;
-}
-
 /** Call from inside a real user gesture. Safe to call repeatedly. */
 export function primeBlip(): void {
-  if (context) {
-    if (context.state === "suspended") void context.resume();
-    return;
-  }
-  const Ctor = getConstructor();
-  if (!Ctor) return;
-  try {
-    context = new Ctor();
-    void context.resume();
-  } catch {
-    context = null;
-  }
+  primeAudioContext();
 }
 
 /** Re-arm after an OS interruption suspended the context. No gesture needed
  *  once it has been unlocked at least once. */
 export function resumeBlip(): void {
-  if (context?.state === "suspended") void context.resume();
+  resumeAudioContext();
 }
 
 export function playBlip(): void {
+  const context = getAudioContext();
   if (!context || context.state !== "running") return;
   const now = Date.now();
   if (now - lastPlayedAt < THROTTLE_MS) return;

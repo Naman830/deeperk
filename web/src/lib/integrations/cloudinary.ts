@@ -114,3 +114,91 @@ export const AVATAR_FOLDER = "avatars";
 /** Chat media is scoped by conversation, not by uploader, so a sweep can walk
  *  one prefix per conversation. */
 export const CHAT_MEDIA_FOLDER = "chat";
+
+// ---------------------------------------------------------------------------
+// Admin API — used only by the nightly cron jobs (web/src/lib/jobs/*). It has
+// its own hourly quota, far tighter than the upload API's, which is why every
+// listing response surfaces rate_limit_remaining for the caller to report.
+// Helpers stay resource-type-generic so a future chat/ sweep (mixed
+// image/video/raw) can reuse them — same discipline as destroyAsset above.
+// ---------------------------------------------------------------------------
+
+export type ListedAsset = { publicId: string; createdAt: Date };
+
+// Admin API rejections aren't Errors: api.* rejects with { error: { message,
+// http_code } }, uploader with { message, http_code, name }. Handle both.
+function httpCodeOf(err: unknown): number | null {
+  if (typeof err !== "object" || err === null) return null;
+  const e = err as { http_code?: unknown; error?: { http_code?: unknown } };
+  const code = e.http_code ?? e.error?.http_code;
+  return typeof code === "number" ? code : null;
+}
+
+/** One Admin API page of uploaded assets under a prefix (≤500 per page). */
+export async function listAssetsByPrefix(
+  prefix: string,
+  options: { resourceType?: CloudinaryResourceType; maxResults?: number; nextCursor?: string } = {},
+): Promise<{ assets: ListedAsset[]; nextCursor: string | null; rateLimitRemaining: number | null }> {
+  const res = await getCloudinary().api.resources({
+    type: "upload",
+    resource_type: options.resourceType ?? "image",
+    prefix,
+    max_results: options.maxResults ?? 500,
+    ...(options.nextCursor ? { next_cursor: options.nextCursor } : {}),
+  });
+  return {
+    assets: (res.resources as { public_id: string; created_at: string }[]).map((r) => ({
+      publicId: r.public_id,
+      createdAt: new Date(r.created_at),
+    })),
+    nextCursor: res.next_cursor ?? null,
+    rateLimitRemaining: typeof res.rate_limit_remaining === "number" ? res.rate_limit_remaining : null,
+  };
+}
+
+/** Batch delete by public_id, chunked to the Admin API's 100-id cap per call. */
+export async function destroyAssets(
+  publicIds: string[],
+  resourceType: CloudinaryResourceType = "image",
+): Promise<void> {
+  const client = getCloudinary();
+  for (let i = 0; i < publicIds.length; i += 100) {
+    await client.api.delete_resources(publicIds.slice(i, i + 100), {
+      resource_type: resourceType,
+      type: "upload",
+      invalidate: true,
+    });
+  }
+}
+
+/**
+ * Deletes everything under a prefix (caller supplies the trailing "/").
+ * delete_resources_by_prefix removes ≤1000 per call and sets `partial` when
+ * more remain; the loop is bounded so even a lying `partial` can't spin.
+ */
+export async function destroyAssetsByPrefix(
+  prefix: string,
+  resourceType: CloudinaryResourceType = "image",
+): Promise<void> {
+  const client = getCloudinary();
+  for (let i = 0; i < 20; i += 1) {
+    const res = await client.api.delete_resources_by_prefix(prefix, {
+      resource_type: resourceType,
+      invalidate: true,
+    });
+    if (!res.partial) return;
+  }
+}
+
+/**
+ * Removes the folder entry itself once its assets are gone. "Not found" counts
+ * as success — dynamic-folder-mode accounts may never have created one.
+ */
+export async function deleteEmptyFolder(path: string): Promise<void> {
+  try {
+    await getCloudinary().api.delete_folder(path);
+  } catch (err) {
+    if (httpCodeOf(err) === 404) return;
+    throw err;
+  }
+}
