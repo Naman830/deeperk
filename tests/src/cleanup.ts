@@ -16,7 +16,10 @@ const { like, inArray, or, eq } = ops;
  * and the neon-http driver has no transactions, so the order below is what
  * satisfies every ON DELETE RESTRICT — do not reorder:
  *   message_deletion/message/conversation_member RESTRICT to user;
- *   conversation CASCADEs its own members+messages; block RESTRICTs both ways;
+ *   call_participant (user_id) and call (started_by_id) RESTRICT to user too —
+ *   deleted before user; message.call_id is SET NULL so call-vs-message order
+ *   is free; conversation CASCADEs its own members+messages+calls;
+ *   block RESTRICTs both ways;
  *   account/session/privacy_settings/social_link/pending_contact_change
  *   CASCADE from user at the end.
  *
@@ -38,6 +41,8 @@ export async function cleanupAll(): Promise<void> {
 
     await db.delete(schema.messageDeletion).where(inArray(schema.messageDeletion.userId, userIds));
     await db.delete(schema.message).where(inArray(schema.message.senderId, userIds));
+    await db.delete(schema.callParticipant).where(inArray(schema.callParticipant.userId, userIds));
+    await db.delete(schema.call).where(inArray(schema.call.startedById, userIds));
     await db.delete(schema.conversationMember).where(inArray(schema.conversationMember.userId, userIds));
     if (conversationIds.length > 0) {
       await db.delete(schema.conversation).where(inArray(schema.conversation.id, conversationIds));
@@ -73,6 +78,8 @@ export async function cleanupAll(): Promise<void> {
     if (strayIds.length > 0) {
       await db.delete(schema.messageDeletion).where(inArray(schema.messageDeletion.userId, strayIds));
       await db.delete(schema.message).where(inArray(schema.message.senderId, strayIds));
+      await db.delete(schema.callParticipant).where(inArray(schema.callParticipant.userId, strayIds));
+      await db.delete(schema.call).where(inArray(schema.call.startedById, strayIds));
       await db.delete(schema.conversationMember).where(inArray(schema.conversationMember.userId, strayIds));
       await db.delete(schema.reservedUsername).where(inArray(schema.reservedUsername.userId, strayIds));
       await db.delete(schema.user).where(inArray(schema.user.id, strayIds));

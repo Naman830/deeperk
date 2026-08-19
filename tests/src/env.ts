@@ -25,6 +25,10 @@ export const config = {
   internalApiSecret: process.env.INTERNAL_API_SECRET ?? "",
   /** Real, readable inbox for the two flows that genuinely send mail. Optional. */
   testEmail: process.env.TEST_EMAIL,
+  /** Authorizes /api/cron/*. Read from web/.env.local, so the value the routes
+   *  see and the value the spec sends are the same by construction. Optional —
+   *  85-cron-jobs skips without it. */
+  cronSecret: process.env.CRON_SECRET ?? "",
 };
 
 if (!config.databaseUrl) {
