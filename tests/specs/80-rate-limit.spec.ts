@@ -42,8 +42,8 @@ import { createUser, createDirect, type FixtureUser } from "../src/fixtures";
  *   chat-search:<userId>            60s  60    api/conversations/[id]/messages/search
  *   chat-media-list:<userId>        60s  60    api/conversations/[id]/media
  *   forward:<userId>                60s  30    api/conversations/[id]/forward
- *   chat-media:<userId>             60s  10    api/upload/chat-media
- *   chat-media-daily:<userId>    86400s 100    api/upload/chat-media
+ *   chat-media:<userId>             60s  10    api/upload/chat-media     ← tested here
+ *   chat-media-daily:<userId>    86400s 100    api/upload/chat-media     ← tested here
  */
 
 // Pinned from api/conversations/[id]/messages/route.ts's HISTORY_LIMIT.
@@ -100,5 +100,31 @@ describe("http rate limit (chat-history bucket)", () => {
       .where(eq(schema.rateLimitHit.bucketKey, bucketKey));
     expect(rows).toHaveLength(1);
     expect(rows[0].count).toBe(1);
+  });
+
+  it("the two chat-media buckets 429 before any parsing or Cloudinary spend", async () => {
+    // Both limits gate formData() itself, so a header-only probe suffices —
+    // the "file" here is 8 junk bytes that never reach the sniff.
+    const probe = () => {
+      const form = new FormData();
+      form.append("conversationId", conversationId);
+      form.append("file", new Blob([new Uint8Array(8)], { type: "image/png" }), "junk.png");
+      return user.api.post("/api/upload/chat-media", { form });
+    };
+
+    await seedRateLimit(`chat-media:${user.userId}`, 10);
+    const perMinute = await probe();
+    expect(perMinute.status).toBe(429);
+    expect(perMinute.body).toEqual({ error: "Too many uploads. Please try again later." });
+
+    // Reopen the per-minute bucket so only the daily one can trip next.
+    await db
+      .update(schema.rateLimitHit)
+      .set({ windowStart: new Date(Date.now() - 65 * 1000) })
+      .where(eq(schema.rateLimitHit.bucketKey, `chat-media:${user.userId}`));
+    await seedRateLimit(`chat-media-daily:${user.userId}`, 100);
+    const daily = await probe();
+    expect(daily.status).toBe(429);
+    expect(daily.body).toEqual({ error: "Daily upload limit reached." });
   });
 });
