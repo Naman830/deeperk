@@ -1,6 +1,6 @@
 import type { ConversationType } from "@/lib/chat/types";
 
-// The call wire contract. Mirrored by hand in server/src/handlers/call.js
+// The call wire contract. Mirrored by hand in server/src/controllers/call/
 // (the server is CommonJS and cannot import this file) — change both or neither.
 
 export type CallKind = "AUDIO" | "VIDEO";

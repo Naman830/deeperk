@@ -10,7 +10,7 @@ import { connectAs, emitWithAck, closeAllSockets } from "../src/socket";
  * notification to the blocked person.
  */
 
-// The exact BLOCKED constant from server/src/handlers/chat.js — code is
+// The exact BLOCKED constant from server/src/controllers/chat/shared.js — code is
 // NOT_FOUND on purpose, but the copy differs from membership's
 // "Conversation not found.", which is what proves the block gate fired.
 const SOCKET_BLOCKED_ACK = { ok: false, code: "NOT_FOUND", error: "Couldn't send that message." };

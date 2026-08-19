@@ -1,8 +1,8 @@
 const { Server } = require("socket.io");
 
-const { env } = require("../env");
-const { resolveHandshakeUser } = require("./auth");
-const presence = require("../presence");
+const { env } = require("../config/env");
+const { resolveHandshakeUser } = require("../middlewares/auth");
+const presence = require("../services/presence");
 
 const MAX_SOCKETS_PER_USER = 10;
 

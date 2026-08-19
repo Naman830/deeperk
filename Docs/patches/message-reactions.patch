@@ -1,0 +1,1143 @@
+diff --git a/Docs/chat/chat.md b/Docs/chat/chat.md
+index de5f560..3ed6bd0 100644
+--- a/Docs/chat/chat.md
++++ b/Docs/chat/chat.md
+@@ -226,9 +226,7 @@ No Web Push (needs a service worker + VAPID + permission prompt) — README §13
+ 
+ **~~Block & mute.~~ BUILT (2026-08-18).** A `block` table in the new `db/schema/social/` domain, checked in both directions at every gate: DM creation, `message:send` (DIRECT only — one member blocking another must not break a group for everybody), group member-add, and people search. Every gate answers exactly what it would answer for a user who does not exist; none of them says "you are blocked", which would turn the block into a notification. Mute is `conversation_member.mutedUntil`, a timestamp rather than a boolean so "mute for 8 hours" is expressible.
+ 
+-**Message editing — BUILT (2026-08-18).** `message.editedAt`, as this line proposed. TEXT-only, own-messages-only, no time limit, and deliberately does **not** bump `conversation.updatedAt` — an edit to a week-old message must not jump the conversation to the top of everyone's sidebar.
+-
+-**Message reactions — still not built on `main`.** Built and then deliberately deferred: the whole feature lives on the `feature/message-reactions` branch (a `reaction` table keyed on `(messageId, userId, emoji)`, `reaction:toggle`/`reaction:updated`, a store, a picker and the chips) and was removed from `main` because it isn't needed yet. Bring it back by diffing that branch rather than rebuilding it.
++**~~Message reactions & editing.~~ BUILT (2026-08-18).** Exactly the shape this line proposed: `message.editedAt`, and a `reaction` table keyed on `(messageId, userId, emoji)`. Editing is TEXT-only, own-messages-only, with no time limit, and deliberately does **not** bump `conversation.updatedAt` — an edit to a week-old message must not jump the conversation to the top of everyone's sidebar. Reaction emoji are validated as "exactly one RGI emoji" on the server rather than against an allowlist mirrored on both sides, so the client's curated picker can grow without a matching server change.
+ 
+ **~~Per-person read receipts.~~ BUILT (2026-08-18)** — see §4, which now records how, and why it turned out to need no new table.
+ 
+diff --git a/Docs/database/schema.md b/Docs/database/schema.md
+index 306c509..18f894c 100644
+--- a/Docs/database/schema.md
++++ b/Docs/database/schema.md
+@@ -311,7 +311,7 @@ Index: `idx_call_participant_user` on `user_id` alone — required for the busy-
+ Per the confirmed decision to keep this pass limited to what's actually being built (see [`../../CLAUDE.md`](../../CLAUDE.md)):
+ 
+ - **`follow`** (followers/following/friends graph) — described in `profile.md` and `chat.md` as planned, no feature doc yet.
+-- **`reaction`** (message emoji reactions) — designed and built, then **deliberately kept off `main`**. The table lives on the `feature/message-reactions` branch: PK `(message_id, user_id, emoji)`, `message_id` CASCADE, `user_id` RESTRICT, no secondary index (the PK leads with `message_id`, which is the only query), `emoji` as plain `text` validated app-side per decision #2. Note the table **was** pushed to Neon before the feature was pulled, so an empty `reaction` table may still exist there — the next `drizzle-kit push` from `main` will drop it.
++- ~~**`reaction`**~~ — **built 2026-08-18.** PK `(message_id, user_id, emoji)`, `message_id` CASCADE, `user_id` RESTRICT, no secondary index (the PK leads with `message_id`, which is the only query). `emoji` is plain `text` validated app-side, per decision #2's carve-out for sets that churn.
+ - **`recent_search`** (search history) — described in `search.md` as planned.
+ - **`privacy_settings.friendRequests`** and the `FRIENDS`/`FRIENDS_OF_FRIENDS` audience tiers — blocked on `follow` existing; the `text`-column choice in §4.2 means adding these later needs no schema migration, just a wider app-level allowed-values list.
+ 
+diff --git a/README.md b/README.md
+index bd86101..1c89454 100644
+--- a/README.md
++++ b/README.md
+@@ -31,12 +31,10 @@ Tick a task off below when it's done, and update `CLAUDE.md` with any decision m
+ - [x] Chat (REST + Socket.IO)
+ - [x] Chat UX expansion — all 4 phases built (see `CLAUDE.md` for the decisions).
+       Phase 1: delete-for-me, three-way delete dialog, long-press/right-click menu, mobile
+-      bubble sizing. Phase 2: reply, edit, forward, copy, multi-select, autolinking.
++      bubble sizing. Phase 2: reply, edit, forward, copy, multi-select, reactions, autolinking.
+       Phase 3: read receipts, unread divider, toast rework, Settings → Notifications.
+       Phase 4: pin/mute/archive/block, clear & delete chat, in-chat search, image reflow fix.
+       Plus @mentions in groups and a per-chat media gallery. Schema is pushed and verified.
+-      Message reactions were built and then deliberately held back — they live on the
+-      `feature/message-reactions` branch, not on `main`.
+ - [ ] Call signaling (Socket.IO, `server/`)
+ 
+ ### Deferred background jobs
+diff --git a/db/schema/chat/index.js b/db/schema/chat/index.js
+index d7c68b5..751250c 100644
+--- a/db/schema/chat/index.js
++++ b/db/schema/chat/index.js
+@@ -2,6 +2,7 @@ const { conversationTypeEnum, conversation } = require("./conversation");
+ const { conversationRoleEnum, conversationMember } = require("./conversation-member");
+ const { messageTypeEnum, message } = require("./message");
+ const { messageDeletion } = require("./message-deletion");
++const { reaction } = require("./reaction");
+ 
+ module.exports = {
+   conversationTypeEnum,
+@@ -11,4 +12,5 @@ module.exports = {
+   messageTypeEnum,
+   message,
+   messageDeletion,
++  reaction,
+ };
+diff --git a/db/schema/chat/reaction.js b/db/schema/chat/reaction.js
+new file mode 100644
+index 0000000..2429922
+--- /dev/null
++++ b/db/schema/chat/reaction.js
+@@ -0,0 +1,58 @@
++// Emoji reactions on a message. One row per (message, user, emoji), so a person
++// can leave several different reactions on the same message but each one only
++// once — the shape Docs/chat/chat.md §9 itself proposes.
++
++const {
++  pgTable,
++  text,
++  timestamp,
++  primaryKey,
++} = require("drizzle-orm/pg-core");
++const { user } = require("../auth/user");
++const { message } = require("./message");
++
++/*
++message
++   │
++   ├── reaction ── user A  "❤️"
++   ├── reaction ── user B  "❤️"
++   └── reaction ── user A  "👍"   (same user, different emoji — allowed)
++*/
++const reaction = pgTable(
++  "reaction",
++  {
++    // CASCADE, same reasoning as message_deletion: a reaction on a message that
++    // no longer exists records nothing. Delete-for-everyone is a soft delete, so
++    // this only fires on a genuine hard delete.
++    messageId: text("message_id")
++      .notNull()
++      .references(() => message.id, { onDelete: "cascade" }),
++
++    // RESTRICT, matching the repo-wide rule for FKs to user.
++    userId: text("user_id")
++      .notNull()
++      .references(() => user.id, { onDelete: "restrict" }),
++
++    // Plain text with app-level validation, not a pgEnum — exactly the case
++    // CLAUDE.md decision #2 carves out. The set churns, and a native enum needs
++    // an ALTER TYPE under this repo's drizzle-kit push workflow.
++    emoji: text("emoji").notNull(),
++
++    createdAt: timestamp("created_at", { withTimezone: true })
++      .notNull()
++      .defaultNow(),
++  },
++  (table) => [
++    // Makes toggling idempotent: onConflictDoNothing on the way in, a delete on
++    // the way out, so a double-tap can never produce two rows.
++    primaryKey({ columns: [table.messageId, table.userId, table.emoji] }),
++
++    // No secondary index on message_id, for the same reason message_deletion
++    // has none: the PK's leading column IS message_id, so "every reaction on
++    // this page of messages" (message_id IN (...)) is already served by the PK
++    // btree. A narrower duplicate would buy a marginally smaller scan and cost
++    // a second index to maintain on every toggle.
++  ],
++);
++
++module.exports = { reaction };
+diff --git a/server/src/emoji.js b/server/src/emoji.js
+new file mode 100644
+index 0000000..233c0fd
+--- /dev/null
++++ b/server/src/emoji.js
+@@ -0,0 +1,36 @@
++/**
++ * What counts as a reaction emoji.
++ *
++ * A property-escape check rather than a hard-coded allowlist mirrored on both
++ * sides. An allowlist would have to exist twice — here (CommonJS) and in
++ * web/src/lib/chat/emoji.ts — and the two would drift the first time the picker
++ * gains a row, at which point the server silently rejects an emoji the UI
++ * offers. This asks the real question instead: "is this one emoji?"
++ *
++ * \p{RGI_Emoji} needs the `v` flag (Node 20+, Chrome 112+, Safari 17+). That is
++ * fine HERE because this file only ever runs in Node — it is deliberately not
++ * shared with the browser, where an older engine would throw a SyntaxError at
++ * parse time and take the whole bundle down. The client picker uses a curated
++ * list instead, so it never needs this regex.
++ *
++ * The client offers ~60 curated emoji; this accepts any single RGI emoji. That
++ * asymmetry is intentional and safe: the stored value is rendered as plain text
++ * through JSX, so the only thing being defended is "one grapheme, not a
++ * 4000-character string smuggled into a text column".
++ */
++const SINGLE_EMOJI = /^\p{RGI_Emoji}$/v;
++
++// Belt and braces before the regex: RGI sequences top out well under this, and
++// it bounds the work the regex engine can be asked to do.
++const MAX_EMOJI_BYTES = 64;
++
++function isValidEmoji(value) {
++  return (
++    typeof value === "string" &&
++    value.length > 0 &&
++    Buffer.byteLength(value, "utf8") <= MAX_EMOJI_BYTES &&
++    SINGLE_EMOJI.test(value)
++  );
++}
++
++module.exports = { isValidEmoji };
+diff --git a/server/src/handlers/chat.js b/server/src/handlers/chat.js
+index 9ab4b06..517873e 100644
+--- a/server/src/handlers/chat.js
++++ b/server/src/handlers/chat.js
+@@ -3,10 +3,11 @@ const { db, schema, ops } = require("../db");
+ const { requireMembership, conversationRoom } = require("../rooms");
+ const { allow, LIMITS } = require("../rate-limit");
+ const { verifyMediaToken } = require("../media-token");
++const { isValidEmoji } = require("../emoji");
+ const presence = require("../presence");
+ const notify = require("./notify");
+ 
+-const { conversation, conversationMember, message, messageDeletion, block } = schema;
++const { conversation, conversationMember, message, messageDeletion, reaction, block } = schema;
+ const { and, eq, inArray, isNull, ne, or, sql } = ops;
+ 
+ const MESSAGE_MAX_LENGTH = 4000;
+@@ -445,6 +446,77 @@ function registerChatHandlers(io, socket) {
+     }
+   });
+ 
++  // Add or remove one of your reactions. Idempotent in both directions.
++  socket.on("reaction:toggle", async (payload, ack) => {
++    try {
++      const messageId = payload && payload.messageId;
++      const emoji = payload && payload.emoji;
++      if (typeof messageId !== "string" || !ID_PATTERN.test(messageId)) {
++        return fail(ack, { code: "INVALID", error: "Invalid request." });
++      }
++      // Validated as "exactly one emoji", never as free text — the column is
++      // plain text and this is the only thing standing between it and a 4000
++      // character body smuggled in as a reaction.
++      if (!isValidEmoji(emoji)) return fail(ack, { code: "INVALID", error: "Invalid request." });
++      if (!allow(`react:${userId}`, LIMITS.react.windowMs, LIMITS.react.max)) {
++        return fail(ack, { code: "RATE_LIMITED", error: "Slow down." });
++      }
++
++      // Membership of the message's conversation, not ownership — you react to
++      // other people's messages, that is the entire feature. Same single-join
++      // shape as delete-for-me, and the same collapsed NOT_FOUND.
++      const [row] = await db
++        .select({ conversationId: message.conversationId, senderId: message.senderId })
++        .from(message)
++        .innerJoin(
++          conversationMember,
++          and(
++            eq(conversationMember.conversationId, message.conversationId),
++            eq(conversationMember.userId, userId),
++          ),
++        )
++        .where(and(eq(message.id, messageId), isNull(message.deletedAt)))
++        .limit(1);
++
++      if (!row) return fail(ack, { code: "NOT_FOUND", error: "Message not found." });
++
++      // Delete-then-insert rather than a read to decide: with no transactions,
++      // a read-then-write races two taps into an inconsistent state. The delete
++      // reports whether the row existed, which IS the toggle decision, so this
++      // is one authoritative statement either way.
++      const removed = await db
++        .delete(reaction)
++        .where(
++          and(
++            eq(reaction.messageId, messageId),
++            eq(reaction.userId, userId),
++            eq(reaction.emoji, emoji),
++          ),
++        )
++        .returning({ emoji: reaction.emoji });
++
++      const added = removed.length === 0;
++      if (added) {
++        await db.insert(reaction).values({ messageId, userId, emoji }).onConflictDoNothing();
++      }
++
++      notify.toConversation(io, row.conversationId, "reaction:updated", {
++        conversationId: row.conversationId,
++        messageId,
++        emoji,
++        userId,
++        added,
++        // So the recipient can decide whether to notify without a lookup: a
++        // reaction is only worth a toast when it is on YOUR message.
++        messageSenderId: row.senderId,
++      });
++      if (typeof ack === "function") ack({ ok: true, messageId, emoji, added });
++    } catch (error) {
++      console.error("[chat:reaction-toggle]", error);
++      fail(ack, { code: "SERVER_ERROR", error: "Couldn't react. Try again." });
++    }
++  });
++
+   // The middle tick. Emitted by a RECIPIENT when a message reaches their
+   // client, which is information no other party can produce.
+   socket.on("conversation:delivered", async (payload) => {
+diff --git a/server/src/rate-limit.js b/server/src/rate-limit.js
+index 6abfd7d..839790c 100644
+--- a/server/src/rate-limit.js
++++ b/server/src/rate-limit.js
+@@ -57,6 +57,9 @@ const LIMITS = {
+   // An UPDATE of one row, own messages only. Generous because a typo fixed
+   // three times in a row is normal behaviour, not abuse.
+   edit: { windowMs: 60_000, max: 30 },
++  // Two tiny writes at most and it is the most tap-happy control in the app —
++  // people scroll back and react to a dozen messages in a burst.
++  react: { windowMs: 60_000, max: 60 },
+   // Emitted by the recipient once per incoming message, so it tracks the send
+   // limit rather than the read limit. Same runaway-client guard as `read`.
+   delivered: { windowMs: 10_000, max: 30 },
+diff --git a/web/src/app/(app)/(messaging)/chats/[conversationId]/chat-thread.tsx b/web/src/app/(app)/(messaging)/chats/[conversationId]/chat-thread.tsx
+index 0267a97..3b2599f 100644
+--- a/web/src/app/(app)/(messaging)/chats/[conversationId]/chat-thread.tsx
++++ b/web/src/app/(app)/(messaging)/chats/[conversationId]/chat-thread.tsx
+@@ -15,10 +15,11 @@ import {
+   mergeMessages,
+   pushLiveMessages,
+ } from "@/lib/chat/live-store";
++import { seedReactions } from "@/lib/chat/reaction-store";
+ import { copyText } from "@/lib/clipboard";
+ import { useStickToBottom } from "@/lib/hooks/use-stick-to-bottom";
+ import { formatMessageCursor } from "@/lib/validation/chat";
+-import type { ChatMessage, ConversationDetail } from "@/lib/chat/types";
++import type { ChatMessage, ConversationDetail, ReactionMap } from "@/lib/chat/types";
+ import { useRealtime } from "../../../realtime-provider";
+ import { ThreadHeader } from "./thread-header";
+ import { SelectionBar } from "./selection-bar";
+@@ -38,12 +39,14 @@ export function ChatThread({
+   viewerId,
+   conversation,
+   initialMessages,
++  initialReactions,
+   initialCursor,
+   initialHasMore,
+ }: {
+   viewerId: string;
+   conversation: ConversationDetail;
+   initialMessages: ChatMessage[];
++  initialReactions: ReactionMap;
+   initialCursor: string | null;
+   initialHasMore: boolean;
+ }) {
+@@ -127,8 +130,13 @@ export function ChatThread({
+     return has ? watermark : null;
+   });
+ 
+-  // An effect rather than a render-time call: it writes to module-level state,
+-  // and a render-phase write is a side effect React is allowed to run twice.
++  // Seed the two stores the server rendered data for. Effects rather than
++  // render-time calls: both write to module-level state, and a render-phase
++  // write is a side effect React is allowed to run twice.
++  useEffect(() => {
++    seedReactions(initialReactions);
++  }, [initialReactions]);
++
+   useEffect(() => {
+     seedReceipts(conversation.id, conversation.members);
+   }, [conversation.id, conversation.members, seedReceipts]);
+@@ -236,12 +244,14 @@ export function ChatThread({
+       if (!response.ok) return;
+       const data = (await response.json()) as {
+         messages: ChatMessage[];
++        reactions?: ReactionMap;
+         nextCursor: string | null;
+         hasMore: boolean;
+       };
+       // Captured synchronously before the state change, so the layout effect can
+       // restore the exact reading position from the scrollHeight delta.
+       captureBeforePrepend();
++      if (data.reactions) seedReactions(data.reactions);
+       setHistory((current) => [...data.messages, ...current]);
+       setCursor(data.nextCursor);
+       setHasMore(data.hasMore);
+@@ -289,9 +299,11 @@ export function ChatThread({
+         }
+         const data = (await response.json()) as {
+           messages: ChatMessage[];
++          reactions?: ReactionMap;
+           nextCursor: string | null;
+           hasMore: boolean;
+         };
++        if (data.reactions) seedReactions(data.reactions);
+         setHistory(data.messages);
+         setCursor(data.nextCursor);
+         setHasMore(data.hasMore);
+diff --git a/web/src/app/(app)/(messaging)/chats/[conversationId]/message-bubble.tsx b/web/src/app/(app)/(messaging)/chats/[conversationId]/message-bubble.tsx
+index 9a087cf..ff1a370 100644
+--- a/web/src/app/(app)/(messaging)/chats/[conversationId]/message-bubble.tsx
++++ b/web/src/app/(app)/(messaging)/chats/[conversationId]/message-bubble.tsx
+@@ -11,6 +11,7 @@ import {
+   ContextMenuSeparator,
+   ContextMenuTrigger,
+ } from "@/components/ui/context-menu";
++import { getReactions } from "@/lib/chat/reaction-store";
+ import { renderMessageBody } from "@/lib/chat/rich-text";
+ import { copyText } from "@/lib/clipboard";
+ import { cn } from "@/lib/utils";
+@@ -20,6 +21,8 @@ import { useRealtime } from "../../../realtime-provider";
+ import { MessageActions } from "./message-actions";
+ import { MessageMenuItems, canDeleteForEveryone, canReply } from "./message-menu-items";
+ import { DeleteMessageDialog } from "./delete-message-dialog";
++import { ReactionBar } from "./reaction-bar";
++import { ReactionChips } from "./reaction-chips";
+ 
+ // No "use client": rendered only from message-list.tsx, inside chat-thread's
+ // boundary.
+@@ -83,7 +86,7 @@ export function MessageBubble({
+ }) {
+   // Hooks first: SYSTEM/CALL returns early below, and an early return above a
+   // hook call changes hook order between renders.
+-  const { deleteMessage, setReply, setEdit } = useRealtime();
++  const { deleteMessage, setReply, setEdit, toggleReaction } = useRealtime();
+   const [confirming, setConfirming] = useState(false);
+ 
+   // SYSTEM and CALL are centred notices, never grouped and never avatared.
+@@ -297,6 +300,18 @@ export function MessageBubble({
+           <ContextMenu>
+             <ContextMenuTrigger asChild>{bubble}</ContextMenuTrigger>
+             <ContextMenuContent className="w-48">
++              {/* The reaction bar rides inside the context menu on touch, which
++                  is the only surface where it is otherwise unreachable — there
++                  is no hover to raise the desktop bar. */}
++              {!deleted && (
++                <div className="mb-1 px-1">
++                  <ReactionBar
++                    onPick={(emoji) => toggleReaction(message.id, emoji)}
++                    mine={mineEmoji(message.id, viewerId)}
++                    className="w-full justify-between border-0 p-0 shadow-none"
++                  />
++                </div>
++              )}
+               <MessageMenuItems {...menuProps} itemAs={ContextMenuItem} separatorAs={ContextMenuSeparator} />
+             </ContextMenuContent>
+           </ContextMenu>
+@@ -304,6 +319,15 @@ export function MessageBubble({
+           bubble
+         )}
+ 
++        {!deleted && (
++          <ReactionChips
++            messageId={message.id}
++            viewerId={viewerId}
++            onToggle={(emoji) => toggleReaction(message.id, emoji)}
++            align={isOwn ? "end" : "start"}
++          />
++        )}
++
+         {status === "failed" && (
+           // On the bubble, never also a toast: the optimistic message is still
+           // on screen, so this is where the failure belongs.
+@@ -319,6 +343,22 @@ export function MessageBubble({
+         )}
+       </div>
+ 
++      {/* The hover reaction bar. Absolutely positioned so it can never widen the
++          row — a bar in normal flow would change the space the bubble's cqw cap
++          resolves against, and the careful own/received symmetry above with it. */}
++      {interactive && !deleted && (
++        <span
++          className={cn(
++            "pointer-events-none absolute -top-4 z-10 opacity-0 transition-opacity",
++            "group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
++            "hidden @md/pane:block",
++            isOwn ? "right-10" : "left-10",
++          )}
++        >
++          <ReactionBar onPick={(emoji) => toggleReaction(message.id, emoji)} mine={mineEmoji(message.id, viewerId)} />
++        </span>
++      )}
++
+       <DeleteMessageDialog
+         open={confirming}
+         onOpenChange={setConfirming}
+@@ -329,6 +369,22 @@ export function MessageBubble({
+   );
+ }
+ 
++/**
++ * Read straight from the store rather than subscribed to.
++ *
++ * The bar only renders on hover, and it re-renders whenever the bubble does —
++ * a subscription here would add one listener per message on screen to keep six
++ * background highlights current, which is not worth it. ReactionChips, which is
++ * always visible and must stay live, does subscribe.
++ */
++function mineEmoji(messageId: string, viewerId: string): ReadonlySet<string> {
++  const mine = new Set<string>();
++  for (const entry of getReactions(messageId)) {
++    if (entry.userIds.includes(viewerId)) mine.add(entry.emoji);
++  }
++  return mine;
++}
++
+ function Tick({ state }: { state: TickState }) {
+   switch (state) {
+     case "pending":
+diff --git a/web/src/app/(app)/(messaging)/chats/[conversationId]/message-list.tsx b/web/src/app/(app)/(messaging)/chats/[conversationId]/message-list.tsx
+index ac798c3..0059b05 100644
+--- a/web/src/app/(app)/(messaging)/chats/[conversationId]/message-list.tsx
++++ b/web/src/app/(app)/(messaging)/chats/[conversationId]/message-list.tsx
+@@ -150,7 +150,8 @@ export function MessageList({
+           return (
+             // sticky: the day chip pins to the top of the viewport while you
+             // scroll through that day, which is how Telegram keeps long
+-            // scrollback legible. z-10 clears the bubbles beneath it.
++            // scrollback legible. z-10 clears the bubbles; the hover reaction
++            // bar sits at the same level and is only raised on hover.
+             <li key={row.key} className="sticky top-1 z-10 flex justify-center py-2">
+               <span className="text-muted-foreground bg-background/80 rounded-full border px-2.5 py-1 text-[11px] shadow-sm backdrop-blur">
+                 {row.label}
+diff --git a/web/src/app/(app)/(messaging)/chats/[conversationId]/page.tsx b/web/src/app/(app)/(messaging)/chats/[conversationId]/page.tsx
+index 06ad6d9..def97f4 100644
+--- a/web/src/app/(app)/(messaging)/chats/[conversationId]/page.tsx
++++ b/web/src/app/(app)/(messaging)/chats/[conversationId]/page.tsx
+@@ -42,6 +42,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
+       viewerId={session.user.id}
+       conversation={thread.conversation}
+       initialMessages={thread.messages}
++      initialReactions={thread.reactions}
+       initialCursor={thread.nextCursor}
+       initialHasMore={thread.hasMore}
+     />
+diff --git a/web/src/app/(app)/(messaging)/chats/[conversationId]/reaction-bar.tsx b/web/src/app/(app)/(messaging)/chats/[conversationId]/reaction-bar.tsx
+new file mode 100644
+index 0000000..5007980
+--- /dev/null
++++ b/web/src/app/(app)/(messaging)/chats/[conversationId]/reaction-bar.tsx
+@@ -0,0 +1,90 @@
++import { useState } from "react";
++import { SmilePlus } from "lucide-react";
++import { Button } from "@/components/ui/button";
++import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
++import { QUICK_REACTIONS, EMOJI_GROUPS } from "@/lib/chat/emoji";
++import { cn } from "@/lib/utils";
++
++// No "use client": rendered from message-bubble.tsx.
++
++/**
++ * The six-emoji quick bar, plus a "more" popover holding the curated grid.
++ *
++ * No emoji-picker dependency — see lib/chat/emoji.ts for why. The grid is a
++ * plain scrollable list of buttons, which is also the only version that is
++ * keyboard-navigable without extra work.
++ */
++export function ReactionBar({
++  onPick,
++  mine,
++  className,
++}: {
++  onPick: (emoji: string) => void;
++  /** Emoji this viewer has already used on the message, so they read as active. */
++  mine: ReadonlySet<string>;
++  className?: string;
++}) {
++  const [open, setOpen] = useState(false);
++
++  return (
++    <div
++      className={cn(
++        "bg-popover flex items-center gap-0.5 rounded-full border p-1 shadow-lg",
++        className,
++      )}
++    >
++      {QUICK_REACTIONS.map((emoji) => (
++        <button
++          key={emoji}
++          type="button"
++          aria-label={`React ${emoji}`}
++          aria-pressed={mine.has(emoji)}
++          onClick={() => onPick(emoji)}
++          className={cn(
++            "grid size-8 place-items-center rounded-full text-base transition-transform",
++            "hover:bg-accent hover:scale-125 active:scale-110 motion-reduce:hover:scale-100",
++            mine.has(emoji) && "bg-accent",
++          )}
++        >
++          {emoji}
++        </button>
++      ))}
++
++      <Popover open={open} onOpenChange={setOpen}>
++        <PopoverTrigger asChild>
++          <Button type="button" variant="ghost" size="icon-sm" aria-label="More reactions" className="rounded-full">
++            <SmilePlus />
++          </Button>
++        </PopoverTrigger>
++        <PopoverContent align="end" className="w-72 p-2">
++          <div className="scroll-thin max-h-64 overflow-y-auto">
++            {EMOJI_GROUPS.map((group) => (
++              <div key={group.label} className="mb-2 last:mb-0">
++                <p className="text-muted-foreground px-1 pb-1 text-[11px] font-medium">{group.label}</p>
++                <div className="grid grid-cols-8 gap-0.5">
++                  {group.emoji.map((emoji) => (
++                    <button
++                      key={emoji}
++                      type="button"
++                      aria-label={`React ${emoji}`}
++                      onClick={() => {
++                        onPick(emoji);
++                        setOpen(false);
++                      }}
++                      className={cn(
++                        "hover:bg-accent grid size-8 place-items-center rounded-md text-lg",
++                        mine.has(emoji) && "bg-accent",
++                      )}
++                    >
++                      {emoji}
++                    </button>
++                  ))}
++                </div>
++              </div>
++            ))}
++          </div>
++        </PopoverContent>
++      </Popover>
++    </div>
++  );
++}
+diff --git a/web/src/app/(app)/(messaging)/chats/[conversationId]/reaction-chips.tsx b/web/src/app/(app)/(messaging)/chats/[conversationId]/reaction-chips.tsx
+new file mode 100644
+index 0000000..fc78ce3
+--- /dev/null
++++ b/web/src/app/(app)/(messaging)/chats/[conversationId]/reaction-chips.tsx
+@@ -0,0 +1,62 @@
++import { useSyncExternalStore } from "react";
++import { getReactions, getServerReactions, subscribeReactions } from "@/lib/chat/reaction-store";
++import { cn } from "@/lib/utils";
++
++// No "use client": rendered from message-bubble.tsx.
++
++/**
++ * The reaction chips under a bubble.
++ *
++ * Subscribed per message rather than passed down from the thread: a reaction on
++ * one message must re-render that message's chips and nothing else. Reading the
++ * whole map in chat-thread and threading it through message-list would put
++ * every bubble on screen back through render for one tap.
++ */
++export function ReactionChips({
++  messageId,
++  viewerId,
++  onToggle,
++  align,
++}: {
++  messageId: string;
++  viewerId: string;
++  onToggle: (emoji: string) => void;
++  align: "start" | "end";
++}) {
++  const reactions = useSyncExternalStore(
++    subscribeReactions,
++    () => getReactions(messageId),
++    getServerReactions,
++  );
++
++  if (reactions.length === 0) return null;
++
++  return (
++    <span
++      className={cn("mt-1 flex flex-wrap gap-1", align === "end" ? "justify-end" : "justify-start")}
++    >
++      {reactions.map((entry) => {
++        const mine = entry.userIds.includes(viewerId);
++        return (
++          <button
++            key={entry.emoji}
++            type="button"
++            onClick={() => onToggle(entry.emoji)}
++            aria-pressed={mine}
++            aria-label={`${entry.emoji} ${entry.userIds.length}`}
++            className={cn(
++              "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] leading-none",
++              "transition-colors",
++              mine
++                ? "border-primary/40 bg-primary/15 text-primary"
++                : "bg-muted/60 hover:bg-muted border-transparent",
++            )}
++          >
++            <span className="text-xs leading-none">{entry.emoji}</span>
++            <span className="tabular-nums">{entry.userIds.length}</span>
++          </button>
++        );
++      })}
++    </span>
++  );
++}
+diff --git a/web/src/app/(app)/message-toast.tsx b/web/src/app/(app)/message-toast.tsx
+index b0faca4..d076a4d 100644
+--- a/web/src/app/(app)/message-toast.tsx
++++ b/web/src/app/(app)/message-toast.tsx
+@@ -50,6 +50,24 @@ export function notifyIncomingMessage({
+   toast.info(body, { toastId, onClick: onOpen, autoClose: 5000 });
+ }
+ 
++/**
++ * Someone reacted to one of your messages.
++ *
++ * Keyed on the MESSAGE, not the conversation, so a reaction toast never
++ * replaces a message toast — they are different events and collapsing them
++ * would lose one. autoClose is shorter because a reaction is lower value than a
++ * message and should get out of the way faster.
++ */
++export function notifyReaction({ messageId, emoji }: { messageId: string; emoji: string }) {
++  toast.info(
++    <span className="block text-sm">
++      <span className="mr-1 text-base leading-none">{emoji}</span>
++      Someone reacted to your message
++    </span>,
++    { toastId: `react:${messageId}`, autoClose: 3500 },
++  );
++}
++
+ export function notifyAddedToConversation({ conversationId, title }: { conversationId: string; title: string }) {
+   toast.info(title, { toastId: `conv:${conversationId}`, autoClose: 5000 });
+ }
+diff --git a/web/src/app/(app)/realtime-provider.tsx b/web/src/app/(app)/realtime-provider.tsx
+index f4628c0..d628002 100644
+--- a/web/src/app/(app)/realtime-provider.tsx
++++ b/web/src/app/(app)/realtime-provider.tsx
+@@ -13,11 +13,12 @@ import {
+   markLiveMessageEdited,
+   clearLiveMessages,
+ } from "@/lib/chat/live-store";
++import { applyReaction, clearReactions } from "@/lib/chat/reaction-store";
+ import { mentionsUser } from "@/lib/chat/rich-text";
+ import { getNotificationPrefs } from "@/components/features/shell/notification-prefs";
+ import { apiPost, apiPatch, apiDelete } from "@/lib/api-client";
+ import type { ChatMember, ChatMessage, ConversationSummary } from "@/lib/chat/types";
+-import { notifyIncomingMessage, notifyAddedToConversation } from "./message-toast";
++import { notifyIncomingMessage, notifyAddedToConversation, notifyReaction } from "./message-toast";
+ 
+ /**
+  * The single realtime connection, and every piece of state that must outlive a
+@@ -100,6 +101,7 @@ type RealtimeValue = {
+   /** "everyone" tombstones for the whole room; "me" hides it for this user only. */
+   deleteMessage: (messageIds: string | string[], scope: DeleteScope) => Promise<string | null>;
+   editMessage: (messageId: string, text: string) => Promise<string | null>;
++  toggleReaction: (messageId: string, emoji: string) => void;
+   forwardMessages: (targetConversationId: string, messageIds: string[]) => Promise<string | null>;
+   setConversationState: (
+     conversationId: string,
+@@ -281,6 +283,29 @@ export function RealtimeProvider({
+       );
+     };
+ 
++    const onReactionUpdated = ({
++      messageId,
++      emoji,
++      userId,
++      added,
++      messageSenderId,
++    }: {
++      conversationId: string;
++      messageId: string;
++      emoji: string;
++      userId: string;
++      added: boolean;
++      messageSenderId: string;
++    }) => {
++      applyReaction(messageId, emoji, userId, added);
++
++      const { viewerId: me } = stateRef.current;
++      // Only a reaction ADDED by someone else to YOUR message is worth a toast.
++      if (!added || userId === me || messageSenderId !== me) return;
++      if (!getNotificationPrefs().reactionToasts) return;
++      notifyReaction({ messageId, emoji });
++    };
++
+     const onReadBy = ({
+       conversationId,
+       userId,
+@@ -460,6 +485,7 @@ export function RealtimeProvider({
+     socket.on("message:deleted", onMessageDeleted);
+     socket.on("message:hidden", onMessageHidden);
+     socket.on("message:edited", onMessageEdited);
++    socket.on("reaction:updated", onReactionUpdated);
+     socket.on("conversation:read-by", onReadBy);
+     socket.on("conversation:delivered", onDeliveredBy);
+     socket.on("presence:online", onPresenceOnline);
+@@ -482,7 +508,8 @@ export function RealtimeProvider({
+       socket.off("message:deleted", onMessageDeleted);
+       socket.off("message:hidden", onMessageHidden);
+       socket.off("message:edited", onMessageEdited);
+-        socket.off("conversation:read-by", onReadBy);
++      socket.off("reaction:updated", onReactionUpdated);
++      socket.off("conversation:read-by", onReadBy);
+       socket.off("conversation:delivered", onDeliveredBy);
+       socket.off("presence:online", onPresenceOnline);
+       socket.off("presence:offline", onPresenceOffline);
+@@ -689,6 +716,27 @@ export function RealtimeProvider({
+     });
+   }, []);
+ 
++  const toggleReaction = useCallback(
++    (messageId: string, emoji: string) => {
++      const socket = socketRef.current;
++      if (!socket) return;
++      socket.emit(
++        "reaction:toggle",
++        { messageId, emoji },
++        (response?: { ok: boolean; added?: boolean }) => {
++          // Applied from the ack rather than optimistically, because only the
++          // server knows which way the toggle went — two taps racing from two
++          // tabs would otherwise leave the two disagreeing. applyReaction is
++          // idempotent, so the room broadcast that follows is a no-op.
++          if (response?.ok && typeof response.added === "boolean") {
++            applyReaction(messageId, emoji, viewerId, response.added);
++          }
++        },
++      );
++    },
++    [viewerId],
++  );
++
+   const forwardMessages = useCallback(
+     async (targetConversationId: string, messageIds: string[]): Promise<string | null> => {
+       const result = await apiPost<{ success: boolean }>(
+@@ -789,7 +837,10 @@ export function RealtimeProvider({
+   }, []);
+ 
+   useEffect(() => {
+-    return () => clearLiveMessages();
++    return () => {
++      clearLiveMessages();
++      clearReactions();
++    };
+   }, []);
+ 
+   const unreadTotal = useMemo(() => unreadTotalOf(conversations), [conversations]);
+@@ -824,6 +875,7 @@ export function RealtimeProvider({
+       discardMessage,
+       deleteMessage,
+       editMessage,
++      toggleReaction,
+       forwardMessages,
+       setConversationState,
+       clearConversation,
+@@ -853,6 +905,7 @@ export function RealtimeProvider({
+       discardMessage,
+       deleteMessage,
+       editMessage,
++      toggleReaction,
+       forwardMessages,
+       setConversationState,
+       clearConversation,
+diff --git a/web/src/app/(app)/settings/notifications/notifications-form.tsx b/web/src/app/(app)/settings/notifications/notifications-form.tsx
+index 5385c7c..c4b3e6a 100644
+--- a/web/src/app/(app)/settings/notifications/notifications-form.tsx
++++ b/web/src/app/(app)/settings/notifications/notifications-form.tsx
+@@ -22,6 +22,12 @@ const ROWS: {
+     description: "A small popup when a message arrives while you're elsewhere in the app.",
+     icon: MessageSquare,
+   },
++  {
++    key: "reactionToasts",
++    label: "Show reaction popups",
++    description: "When someone reacts to one of your messages.",
++    icon: Bell,
++  },
+   {
+     key: "sound",
+     label: "Play a sound",
+diff --git a/web/src/app/api/conversations/[id]/messages/route.ts b/web/src/app/api/conversations/[id]/messages/route.ts
+index 1c09bab..5f0b5b3 100644
+--- a/web/src/app/api/conversations/[id]/messages/route.ts
++++ b/web/src/app/api/conversations/[id]/messages/route.ts
+@@ -44,7 +44,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id:
+ 
+   if (after) {
+     const messages = await listMessagesAfter(id, userId, after);
+-    return NextResponse.json({ messages, nextCursor: null, hasMore: false });
++    return NextResponse.json({ messages, reactions: {}, nextCursor: null, hasMore: false });
+   }
+ 
+   if (around) {
+diff --git a/web/src/components/features/shell/notification-prefs.tsx b/web/src/components/features/shell/notification-prefs.tsx
+index 247bd70..1d293f8 100644
+--- a/web/src/components/features/shell/notification-prefs.tsx
++++ b/web/src/components/features/shell/notification-prefs.tsx
+@@ -29,6 +29,9 @@ export type NotificationPrefs = {
+   toasts: boolean;
+   sound: boolean;
+   titleBlink: boolean;
++  /** Reactions to your own messages. Separate from `toasts` because they are
++   *  much lower value than a message and the first thing people turn off. */
++  reactionToasts: boolean;
+ };
+ 
+ export const NOTIFICATION_STORAGE_KEY = "chatsphere-notifications";
+@@ -39,6 +42,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+   toasts: true,
+   sound: true,
+   titleBlink: true,
++  reactionToasts: true,
+ };
+ 
+ const PREFS_EVENT = "chatsphere-notifications-change";
+@@ -77,6 +81,7 @@ function parse(raw: string | null): NotificationPrefs {
+       toasts: parsed.toasts ?? DEFAULTS.toasts,
+       sound: parsed.sound ?? DEFAULTS.sound,
+       titleBlink: parsed.titleBlink ?? DEFAULTS.titleBlink,
++      reactionToasts: parsed.reactionToasts ?? DEFAULTS.reactionToasts,
+     };
+   } catch {
+     return DEFAULTS;
+diff --git a/web/src/lib/chat/emoji.ts b/web/src/lib/chat/emoji.ts
+index 3642a8e..7dfaa39 100644
+--- a/web/src/lib/chat/emoji.ts
++++ b/web/src/lib/chat/emoji.ts
+@@ -1,15 +1,21 @@
+ /**
+- * The composer's emoji picker.
++ * The reaction picker's contents.
+  *
+  * A curated list, NOT an emoji-picker dependency. `emoji-mart` and friends ship
+- * roughly a megabyte with their data files, for a control that inserts a single
+- * character. This covers the realistic range at zero bundle cost and no new
+- * package.
++ * roughly a megabyte with their data files, for a control that is used to pick
++ * one of about six things. This covers the realistic range at zero bundle cost
++ * and no new package.
+  *
+- * Nothing validates against it server-side — an emoji inserted here is just
+- * text inside a message body, subject to the same 4000-character cap as any
+- * other text, so the list can grow a row with no matching server change.
++ * It is deliberately NOT mirrored on the server. server/src/emoji.js validates
++ * "is this one emoji?" with a Unicode property escape instead of an allowlist,
++ * so this list can grow a row without a matching server change — the failure
++ * mode an allowlist would have had is the picker offering something the server
++ * silently rejects.
++ *
++ * QUICK_REACTIONS is the hover/long-press bar; the rest opens behind "More".
+  */
++export const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"] as const;
++
+ export const EMOJI_GROUPS: { label: string; emoji: string[] }[] = [
+   {
+     label: "Smileys",
+@@ -20,7 +26,7 @@ export const EMOJI_GROUPS: { label: string; emoji: string[] }[] = [
+     ],
+   },
+   {
+-    label: "Expressions",
++    label: "Reactions",
+     emoji: [
+       "😮", "😯", "😲", "😳", "🥺", "😢", "😭", "😤",
+       "😠", "😡", "🤯", "😱", "😰", "😥", "🙄", "😬",
+diff --git a/web/src/lib/chat/messages.ts b/web/src/lib/chat/messages.ts
+index d47f216..6aa0f4d 100644
+--- a/web/src/lib/chat/messages.ts
++++ b/web/src/lib/chat/messages.ts
+@@ -5,6 +5,7 @@ import {
+   conversationMember,
+   message,
+   messageDeletion,
++  reaction,
+   user,
+   privacySettings,
+ } from "../../../../db/schema";
+@@ -19,7 +20,13 @@ import { escapeLikePattern } from "@/lib/validation/search";
+ import { getMembership } from "./membership";
+ import { toChatUser } from "./conversations";
+ import { presenceVisible } from "@/lib/profile/privacy";
+-import type { ChatMember, ChatMessage, ConversationDetail } from "./types";
++import type {
++  ChatMember,
++  ChatMessage,
++  ConversationDetail,
++  MessageReaction,
++  ReactionMap,
++} from "./types";
+ 
+ type MessageRow = typeof message.$inferSelect;
+ 
+@@ -102,9 +109,37 @@ function visibleTo(conversationId: string, viewerId: string) {
+   );
+ }
+ 
++/**
++ * Reactions for a page of messages, in one query.
++ *
++ * Returned alongside the page rather than embedded in each ChatMessage: a
++ * reaction must not change the message object's identity, or every incoming
++ * reaction re-renders the entire merged list. The client keeps them in their
++ * own store for the same reason.
++ */
++export async function listReactionsFor(messageIds: string[]): Promise<ReactionMap> {
++  if (messageIds.length === 0) return {};
++  const rows = await db
++    .select({ messageId: reaction.messageId, emoji: reaction.emoji, userId: reaction.userId })
++    .from(reaction)
++    .where(inArray(reaction.messageId, messageIds))
++    .orderBy(asc(reaction.createdAt));
++
++  const map: ReactionMap = {};
++  for (const row of rows) {
++    const forMessage = (map[row.messageId] ??= []);
++    const existing = forMessage.find((entry: MessageReaction) => entry.emoji === row.emoji);
++    if (existing) existing.userIds.push(row.userId);
++    else forMessage.push({ emoji: row.emoji, userIds: [row.userId] });
++  }
++  return map;
++}
++
+ export type MessagePage = {
+   /** Oldest first — render order. */
+   messages: ChatMessage[];
++  /** Keyed by message id. Absent key = no reactions on that message. */
++  reactions: ReactionMap;
+   /** Cursor for the next older page, or null when the start has been reached. */
+   nextCursor: string | null;
+   hasMore: boolean;
+@@ -146,8 +181,11 @@ export async function listMessages(
+   const hasMore = rows.length > limit;
+   const page = hasMore ? rows.slice(0, limit) : rows;
+   const oldest = page[page.length - 1];
++  const messages = page.reverse().map(toChatMessage);
++
+   return {
+-    messages: page.reverse().map(toChatMessage),
++    messages,
++    reactions: await listReactionsFor(messages.map((row) => row.id)),
+     nextCursor: hasMore && oldest ? formatMessageCursor(oldest.createdAt, oldest.id) : null,
+     hasMore,
+   };
+@@ -244,10 +282,12 @@ export async function listMessagesAround(
+   // the anchor already sits at the very start.
+   const hasMore = olderAndAnchor.length > span + 1;
+   const older = (hasMore ? olderAndAnchor.slice(0, span + 1) : olderAndAnchor).reverse();
++  const messages = [...older, ...newer].map(toChatMessage);
+   const oldest = older[0];
+ 
+   return {
+-    messages: [...older, ...newer].map(toChatMessage),
++    messages,
++    reactions: await listReactionsFor(messages.map((row) => row.id)),
+     nextCursor: hasMore && oldest ? formatMessageCursor(oldest.createdAt, oldest.id) : null,
+     hasMore,
+   };
+diff --git a/web/src/lib/chat/reaction-store.ts b/web/src/lib/chat/reaction-store.ts
+new file mode 100644
+index 0000000..d611bd8
+--- /dev/null
++++ b/web/src/lib/chat/reaction-store.ts
+@@ -0,0 +1,92 @@
++import type { MessageReaction, ReactionMap } from "./types";
++
++/**
++ * Reactions, kept out of the message objects entirely.
++ *
++ * The alternative — a `reactions` array on ChatMessage — looks tidier and is
++ * measurably worse: mergeMessages rebuilds the rendered list from message
++ * identity, so one person tapping an emoji would produce a new object for that
++ * message, a new array for the list, and a re-render of every bubble on screen.
++ * Here a reaction changes only the snapshot that the reacted-to bubble reads.
++ *
++ * Same useSyncExternalStore shape as live-store.ts, and for the same reason:
++ * the server cannot see this data, so a useState initializer would differ
++ * between the SSR render and the first client render.
++ */
++
++const byMessage = new Map<string, MessageReaction[]>();
++const listeners = new Set<() => void>();
++
++// getSnapshot must return a referentially identical value between calls, or
++// React throws "The result of getSnapshot should be cached". One frozen empty
++// array, shared by every message that has no reactions — which is most of them.
++const EMPTY: readonly MessageReaction[] = Object.freeze([]);
++
++function emit() {
++  for (const listener of listeners) listener();
++}
++
++export function subscribeReactions(listener: () => void): () => void {
++  listeners.add(listener);
++  return () => listeners.delete(listener);
++}
++
++export function getReactions(messageId: string): readonly MessageReaction[] {
++  return byMessage.get(messageId) ?? EMPTY;
++}
++
++/** Stable across renders, and always empty — the server has no reaction store. */
++export function getServerReactions(): readonly MessageReaction[] {
++  return EMPTY;
++}
++
++/**
++ * Seed from a history page.
++ *
++ * Replaces rather than merges: the server's answer is authoritative for the
++ * messages it covers, and a merge would resurrect a reaction that was removed
++ * while this tab was disconnected.
++ */
++export function seedReactions(map: ReactionMap): void {
++  let changed = false;
++  for (const [messageId, reactions] of Object.entries(map)) {
++    byMessage.set(messageId, reactions.map((entry) => ({ emoji: entry.emoji, userIds: [...entry.userIds] })));
++    changed = true;
++  }
++  if (changed) emit();
++}
++
++/** One toggle, from the socket or from an optimistic local apply. Idempotent. */
++export function applyReaction(messageId: string, emoji: string, userId: string, added: boolean): void {
++  const current = byMessage.get(messageId) ?? [];
++  const index = current.findIndex((entry) => entry.emoji === emoji);
++  const entry = index === -1 ? null : current[index];
++  const has = entry?.userIds.includes(userId) ?? false;
++  // Idempotent in both directions: the actor applies optimistically AND
++  // receives the room broadcast, so every toggle arrives twice.
++  if (added === has) return;
++
++  let next: MessageReaction[];
++  if (added) {
++    next = entry
++      ? current.map((item, i) => (i === index ? { ...item, userIds: [...item.userIds, userId] } : item))
++      : [...current, { emoji, userIds: [userId] }];
++  } else {
++    const remaining = entry!.userIds.filter((id) => id !== userId);
++    // An emoji nobody is using any more is removed outright, so an empty chip
++    // never renders.
++    next =
++      remaining.length === 0
++        ? current.filter((_, i) => i !== index)
++        : current.map((item, i) => (i === index ? { ...item, userIds: remaining } : item));
++  }
++
++  if (next.length === 0) byMessage.delete(messageId);
++  else byMessage.set(messageId, next);
++  emit();
++}
++
++export function clearReactions(): void {
++  byMessage.clear();
++  emit();
++}
+diff --git a/web/src/lib/chat/types.ts b/web/src/lib/chat/types.ts
+index a7868a3..435c0f7 100644
+--- a/web/src/lib/chat/types.ts
++++ b/web/src/lib/chat/types.ts
+@@ -60,6 +60,16 @@ export type ChatMessage = {
+   deletedAt: string | null;
+ };
+ 
++/**
++ * Reactions travel beside messages, never inside them.
++ *
++ * Folding them into ChatMessage would change the message object's identity on
++ * every reaction, and mergeMessages rebuilds from identity — so one person
++ * tapping an emoji would re-render the whole thread.
++ */
++export type MessageReaction = { emoji: string; userIds: string[] };
++export type ReactionMap = Record<string, MessageReaction[]>;
++
+ export type ConversationSummary = {
+   id: string;
+   type: ConversationType;
+@@ -106,6 +116,7 @@ export const SOCKET_EVENTS = {
+   MESSAGE_DELETE: "message:delete",
+   MESSAGE_DELETE_FOR_ME: "message:delete-for-me",
+   MESSAGE_EDIT: "message:edit",
++  REACTION_TOGGLE: "reaction:toggle",
+   TYPING_START: "typing:start",
+   TYPING_STOP: "typing:stop",
+   CONVERSATION_READ: "conversation:read",
+@@ -118,6 +129,7 @@ export const SOCKET_EVENTS = {
+   /** Hidden for one user only — sent to that user's own tabs, never the room. */
+   MESSAGE_HIDDEN: "message:hidden",
+   MESSAGE_EDITED: "message:edited",
++  REACTION_UPDATED: "reaction:updated",
+   CONVERSATION_ADDED: "conversation:added",
+   CONVERSATION_REMOVED: "conversation:removed",
+   CONVERSATION_UPDATED: "conversation:updated",

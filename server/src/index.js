@@ -9,13 +9,13 @@ const http = require("node:http");
 const { randomUUID } = require("node:crypto");
 const express = require("express");
 
-const { env } = require("./env");
+const { env } = require("./config/env");
 const { createIo } = require("./socket/create-io");
 const { registerConnectionHandlers } = require("./socket/connection");
 const { startSessionSweep } = require("./socket/session-sweep");
-const presence = require("./presence");
-const activeCalls = require("./active-calls");
-const { internalRouter } = require("./http/internal");
+const presence = require("./services/presence");
+const activeCalls = require("./services/active-calls");
+const { internalRouter } = require("./routes/internal");
 
 const BOOT_ID = randomUUID();
 

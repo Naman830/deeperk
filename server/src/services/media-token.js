@@ -1,5 +1,5 @@
 const { createHmac, timingSafeEqual } = require("node:crypto");
-const { env } = require("./env");
+const { env } = require("../config/env");
 
 /**
  * Verifier for the media token minted by POST /api/upload/chat-media.

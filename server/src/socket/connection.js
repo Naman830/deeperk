@@ -1,8 +1,8 @@
-const presence = require("../presence");
-const { joinInitialRooms } = require("../rooms");
-const { registerChatHandlers } = require("../handlers/chat");
-const { registerCallHandlers } = require("../handlers/call");
-const notify = require("../handlers/notify");
+const presence = require("../services/presence");
+const { joinInitialRooms } = require("../services/rooms");
+const { registerChatHandlers } = require("../controllers/chat");
+const { registerCallHandlers } = require("../controllers/call");
+const notify = require("../controllers/notify");
 
 function registerConnectionHandlers(io, bootId) {
   io.on("connection", async (socket) => {

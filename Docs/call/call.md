@@ -179,14 +179,18 @@ Extends chat.md §3's `server/src/` layout with one new handler and one new in-m
 ```
 server/src/
 ├── index.js
-├── socket/              (auth.js, create-io.js, connection.js, session-sweep.js)
-├── presence.js
-├── active-calls.js     ← Map<userId, callId> — powers the busy check in §2.1, same
-│                          single-server assumption as presence.js
-└── handlers/
-    ├── chat.js
-    └── call.js          ← call:invite, call:ring, call:accept/reject/cancel,
-                             call:join/leave, rtc:signal
+├── socket/                  (create-io.js, connection.js, session-sweep.js)
+├── services/
+│   ├── presence.js
+│   └── active-calls.js     ← Map<userId, callId> — powers the busy check in §2.1, same
+│                              single-server assumption as presence.js
+└── controllers/
+    ├── chat/
+    └── call/                ← call:invite, call:ring, call:accept/reject/cancel,
+        │                       call:join/leave, rtc:signal — one module per concern
+        ├── invite.js  join.js  controls.js  signal.js  state.js
+        ├── disconnect.js  kick.js  end-call.js  shared.js
+        └── index.js
 ```
 
 `active-calls.js` follows the exact same shape as `presence.js`'s online-users map (chat.md §2.6): entering a call adds the entry, leaving removes it, and it's the one place that would need to move to Redis if this ever ran on more than one server — same honest note chat.md already makes about its own maps.

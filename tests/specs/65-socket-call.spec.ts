@@ -12,7 +12,7 @@ import {
 
 /**
  * The call signaling surface, end to end against the locked wire contract
- * (server/src/handlers/call.js): invite/ring fan-out, accept/join, rtc:signal
+ * (server/src/controllers/call/): invite/ring fan-out, accept/join, rtc:signal
  * relay, mute-state, cancel/reject/leave, the CALL history bubble, disconnect
  * behavior, the busy matrix, group mesh limits, authz masking, the block gate
  * and the 15/hr invite limiter. Media itself needs a browser — out of scope.

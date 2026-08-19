@@ -134,22 +134,28 @@ Pick file → client-side size/type check (courtesy only)
 ```
 server/src/
 ├── index.js            ← entrypoint: Express app + /healthz, http.Server, wiring, shutdown
-├── env.js              ← config, validated first (db/ reads DATABASE_URL at module load)
-├── db.js               ← the one require("../../db") bridge to the shared schema
-├── rooms.js            ← room naming + membership (the authorization primitive)
-├── presence.js         ← online-users Map, privacy memo, is_online/last_seen writes (§2.6)
-├── rate-limit.js       ← in-memory fixed-window limiter + LIMITS table (§7)
-├── media-token.js      ← HMAC verifier, mirrors web/src/lib/chat/media-token.ts (§8)
+├── config/
+│   ├── env.js          ← config, validated first (db/ reads DATABASE_URL at module load)
+│   └── db.js           ← the one require("../../../db") bridge to the shared schema
+├── services/
+│   ├── rooms.js        ← room naming + membership (the authorization primitive)
+│   ├── presence.js     ← online-users Map, privacy memo, is_online/last_seen writes (§2.6)
+│   ├── rate-limit.js   ← in-memory fixed-window limiter + LIMITS table (§7)
+│   └── media-token.js  ← HMAC verifier, mirrors web/src/lib/chat/media-token.ts (§8)
+├── middlewares/
+│   └── auth.js         ← the handshake in §2.1 — verifies the session cookie once per connection
 ├── socket/
-│   ├── auth.js         ← the handshake in §2.1 — verifies the session cookie once per connection
 │   ├── create-io.js    ← Server options, CORS/allowRequest, handshake middleware
 │   ├── connection.js   ← connection/disconnecting lifecycle
 │   └── session-sweep.js← 5-minute session revalidation
-├── http/
+├── routes/
 │   └── internal.js     ← POST /internal/events, the Next → socket bridge (§2.1)
-└── handlers/
-    ├── chat.js          ← message:send/delete/delete-for-me/edit, receipts, typing
-    └── notify.js         ← fan-out for toasts/badges (§6)
+└── controllers/
+    ├── shared.js        ← fail/serializeMessage/sendIsBlocked, shared by chat + call
+    ├── notify.js        ← fan-out for toasts/badges (§6)
+    └── chat/            ← one module per concern, registered by its index.js
+        ├── send.js  delete.js  edit.js  receipts.js  typing.js
+        └── shared.js    ← chat-only constants (NOT_FOUND/BLOCKED, max length)
 ```
 
 CORS on the Socket.IO server is locked to the web app's origin only, per README §12's production checklist.

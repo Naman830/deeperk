@@ -2,7 +2,7 @@
 //
 // Load order matters here in a way that is easy to get wrong: db/index.js calls
 // neon(process.env.DATABASE_URL) at MODULE level, so if the environment isn't
-// populated before the first require("../../db") you get neon(undefined) and
+// populated before db/index.js first loads you get neon(undefined) and
 // every query fails with an opaque error. The npm scripts use
 // `node --env-file=.env`, which populates the environment before any module
 // loads at all — that is why there is no dotenv call in this codebase.

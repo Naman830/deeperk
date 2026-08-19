@@ -11,7 +11,7 @@ import {
 } from "../src/socket";
 
 /**
- * The web -> socket internal bridge (server/src/http/internal.js, called by
+ * The web -> socket internal bridge (server/src/routes/internal.js, called by
  * web/src/lib/chat/notify-socket.ts from eight Next routes). Rooms are joined
  * once at connect; this bridge is the only thing that revises them afterwards.
  * The failure mode it guards against is REST-green/realtime-dead: every route

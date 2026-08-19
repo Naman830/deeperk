@@ -1,4 +1,4 @@
-const { userRoom, conversationRoom } = require("../rooms");
+const { userRoom, conversationRoom } = require("../services/rooms");
 
 /**
  * Fan-out primitives (Docs/chat/chat.md §3's notify.js).
@@ -9,7 +9,7 @@ const { userRoom, conversationRoom } = require("../rooms");
  * client decides badge / toast / sound / title.
  *
  * What lives here is the one place that decides *who receives what*, so
- * handlers/chat.js and the future handlers/call.js share it rather than each
+ * controllers/chat/ and controllers/call/ share it rather than each
  * naming rooms inline.
  *
  * Considered and rejected: a per-recipient `notify:message` carrying an

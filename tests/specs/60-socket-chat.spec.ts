@@ -18,7 +18,7 @@ const nodeRequire = createRequire(import.meta.url);
 const sharp: any = nodeRequire("sharp");
 
 /**
- * The socket chat surface, end to end against server/src/handlers/chat.js:
+ * The socket chat surface, end to end against server/src/controllers/chat/:
  * handshake auth, multi-tab fan-out, send validation, clientMsgId idempotency,
  * media tokens, edit/delete/delete-for-me, read/delivered receipts, typing
  * relay semantics, the onlineStatus=NOBODY receipt gate, and the in-memory

@@ -76,7 +76,7 @@ must turn the named spec red; if it stays green the harness is decorative:
    green. Restore it.
 2. Add an empty `loading.tsx` beside `web/src/app/(app)/(messaging)/u/[username]/page.tsx`
    → the hard-404 canary in `95-pages` must fail (200). Remove it.
-3. Comment one field out of `serialize()` in `server/src/handlers/chat.js` →
+3. Comment one field out of `serializeMessage()` in `server/src/controllers/shared.js` →
    the wire-contract test in `00-contracts` must fail. Restore it.
 4. Touch any file under `server/src` mid-run → the run must end red via the
    teardown bootId assert.

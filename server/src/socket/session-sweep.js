@@ -1,6 +1,6 @@
-const { resolveHandshakeUser } = require("./auth");
-const { userRoom } = require("../rooms");
-const presence = require("../presence");
+const { resolveHandshakeUser } = require("../middlewares/auth");
+const { userRoom } = require("../services/rooms");
+const presence = require("../services/presence");
 
 const SESSION_RECHECK_MS = 5 * 60 * 1000;
 

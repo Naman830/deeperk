@@ -1,4 +1,4 @@
-const { db, schema, ops } = require("./db");
+const { db, schema, ops } = require("../config/db");
 
 const { conversationMember } = schema;
 const { and, eq } = ops;

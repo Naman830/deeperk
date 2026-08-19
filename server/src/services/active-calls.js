@@ -1,5 +1,5 @@
-const { db, schema, ops } = require("./db");
-const { env } = require("./env");
+const { db, schema, ops } = require("../config/db");
+const { env } = require("../config/env");
 
 const { call, callParticipant } = schema;
 const { and, eq, isNull, isNotNull, sql } = ops;
