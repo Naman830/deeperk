@@ -32,14 +32,20 @@ import {
 } from "./call-store";
 import type {
   CallAck,
+  CallCancelOk,
   CallEndedEvent,
   CallFailAck,
+  CallIdPayload,
   CallInviteOk,
+  CallInvitePayload,
   CallJoinOk,
   CallKind,
+  CallLeaveOk,
   CallMuteStateEvent,
+  CallMuteStatePayload,
   CallParticipantJoinedEvent,
   CallParticipantLeftEvent,
+  CallRejectOk,
   CallRingCancelledEvent,
   CallRingEvent,
   CallRingHandledEvent,
@@ -48,6 +54,7 @@ import type {
   CallStateSelf,
   CallUser,
   RtcSignalEvent,
+  RtcSignalPayload,
 } from "./types";
 
 /**
@@ -199,7 +206,7 @@ function createPeer(userId: string, initiator: boolean, retried = false): PeerEn
     initiator,
     stream,
     iceServers,
-    onSignal: (data) => socketRef?.emit("rtc:signal", { callId, to: userId, data }),
+    onSignal: (data) => socketRef?.emit("rtc:signal", { callId, to: userId, data } satisfies RtcSignalPayload),
     onStream: (remote) => {
       if (peers.get(userId) === entry) setParticipantStream(userId, remote);
     },
@@ -275,10 +282,10 @@ export async function startCall(conversationId: string, kind: CallKind): Promise
     return;
   }
   setLocalStream(media.stream, media.cameraless);
-  const ack = await emitAck<CallInviteOk>("call:invite", { conversationId, kind });
+  const ack = await emitAck<CallInviteOk>("call:invite", { conversationId, kind } satisfies CallInvitePayload);
   state = getCallState();
   if (state.phase !== "outgoing" || state.conversationId !== conversationId) {
-    if (ack?.ok) socketRef?.emit("call:cancel", { callId: ack.callId }); // bailed while the invite was in flight
+    if (ack?.ok) socketRef?.emit("call:cancel", { callId: ack.callId } satisfies CallIdPayload); // bailed while the invite was in flight
     return;
   }
   if (!ack?.ok) {
@@ -338,7 +345,7 @@ export async function acceptCall(): Promise<void> {
       media = await acquireMedia(kind ?? "AUDIO");
     } catch (err) {
       // A reject, not an error ack — indistinguishable from a decline by design.
-      void emitAck("call:reject", { callId });
+      void emitAck<CallRejectOk>("call:reject", { callId } satisfies CallIdPayload);
       toast.error(mediaErrorMessage(err), { toastId: callToastId(callId) });
       teardown();
       return;
@@ -358,7 +365,7 @@ export async function acceptCall(): Promise<void> {
 export function declineCall(): void {
   const state = getCallState();
   if (state.phase !== "incoming" || !state.callId) return;
-  void emitAck("call:reject", { callId: state.callId });
+  void emitAck<CallRejectOk>("call:reject", { callId: state.callId } satisfies CallIdPayload);
   teardown();
 }
 
@@ -400,14 +407,14 @@ async function joinById(callId: string, event: "call:accept" | "call:join", wasI
   pendingJoinCallId = callId;
   let ack: CallAck<CallJoinOk> | null;
   try {
-    ack = await emitAck<CallJoinOk>(event, { callId });
+    ack = await emitAck<CallJoinOk>(event, { callId } satisfies CallIdPayload);
   } finally {
     pendingJoinCallId = null;
   }
   const state = getCallState();
   if (state.callId !== callId || state.phase === "idle") {
     // Torn down while the ack was in flight — make sure the server agrees.
-    if (ack?.ok) socketRef?.emit("call:leave", { callId });
+    if (ack?.ok) socketRef?.emit("call:leave", { callId } satisfies CallIdPayload);
     return;
   }
   if (!ack) {
@@ -457,7 +464,7 @@ export function hangUp(): void {
         : state.phase === "incoming"
           ? "call:reject"
           : "call:leave";
-    void emitAck(event, { callId: state.callId });
+    void emitAck<CallCancelOk | CallRejectOk | CallLeaveOk>(event, { callId: state.callId } satisfies CallIdPayload);
   }
   teardown();
 }
@@ -483,7 +490,10 @@ export function toggleCamera(): void {
 function emitMuteState(): void {
   const state = getCallState();
   if (!state.callId) return;
-  socketRef?.emit("call:mute-state", { callId: state.callId, micMuted: state.micMuted, cameraOff: state.cameraOff });
+  socketRef?.emit(
+    "call:mute-state",
+    { callId: state.callId, micMuted: state.micMuted, cameraOff: state.cameraOff } satisfies CallMuteStatePayload,
+  );
 }
 
 // --- socket event handlers --------------------------------------------------
@@ -717,7 +727,7 @@ function offerRejoin(self: CallStateSelf): void {
     // Dismissing the offer IS the answer: leave, or the server keeps this user
     // joined forever and a group call can never reach zero and end.
     onClose: () => {
-      if (!rejoined) socketRef?.emit("call:leave", { callId: self.callId });
+      if (!rejoined) socketRef?.emit("call:leave", { callId: self.callId } satisfies CallIdPayload);
     },
   });
 }
