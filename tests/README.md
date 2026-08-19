@@ -19,6 +19,17 @@ Env comes from the same files the servers read (root `.env`, `server/.env`,
   OTP-signup test and the email-change test run and send **one or two real
   Brevo emails**; unset, those tests skip with a notice. Everything else sends
   no mail (fixture emails use the reserved `.test` TLD).
+- `CALL_RING_TIMEOUT_MS` / `CALL_DISCONNECT_GRACE_MS` (`server/.env`) — the
+  three call-timer tests in `65-socket-call` are `it.runIf`-gated and run only
+  when the value fits inside a test (≤ 8000ms); the defaults (30000/15000)
+  skip them. Set both to e.g. `5000` **and restart the socket server** — the
+  harness reads the same env file the server reads at boot, so the gate and
+  the server agree only when the server was booted with the current values
+  (the bootId guard does not catch env drift).
+- `CRON_SECRET` (`web/.env.local`) — gates all of `85-cron-jobs` (the whole
+  file skips without it). Because the harness reads the same file the web
+  server reads, the value the routes check and the value the spec sends match
+  by construction.
 
 ## Fixture + cleanup contract
 
@@ -32,6 +43,14 @@ Env comes from the same files the servers read (root `.env`, `server/.env`,
 - IP-keyed rate buckets use a per-run `x-forwarded-for` from TEST-NET-3
   (`203.0.113.x`), which the app trusts locally because `TRUSTED_PROXIES` is
   unset — deliberate, see CLAUDE.md.
+- **A spec that anonymizes a fixture must restore its identity.** Cleanup
+  discovers fixtures via `username LIKE 'zz.e2e.%'` — the anonymizer rewrites
+  the username, making the row invisible to cleanup **forever**.
+  `85-cron-jobs`'s unconditional `afterAll` writes username/displayUsername/
+  email back by captured id; copy that pattern in any future spec that runs
+  the anonymizer. The same spec also runs against the **real** Cloudinary
+  account: assert only on fixture-owned `avatars/<userId>/` prefixes, and use
+  `>=` on the report's global counters.
 
 ## Why the suite is serial
 
@@ -67,7 +86,9 @@ must turn the named spec red; if it stays green the harness is decorative:
 
 ## Deliberately out of scope
 
-Calls (unbuilt), email deliverability beyond the flag-gated sends, provider
+Call media (real WebRTC needs a browser — Playwright is the follow-up; the
+signaling contract is covered in `65-socket-call`), email deliverability
+beyond the flag-gated sends, provider
 outage paths (Brevo/Cloudinary 5xx need fault injection), load/perf, and
 browser-level interaction (Playwright is the follow-up when visual coverage is
 wanted). CI orchestration (booting `next start` + the socket server inside
