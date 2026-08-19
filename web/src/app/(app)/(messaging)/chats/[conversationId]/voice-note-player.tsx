@@ -31,8 +31,11 @@ export function VoiceNotePlayer({
   const [playing, setPlaying] = useState(false);
   const [positionMs, setPositionMs] = useState(0);
   const [metadataMs, setMetadataMs] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  const totalMs = durationMs ?? metadataMs;
+  // The element's real duration can outrun the probe — trust the longer, or
+  // the seek bar clamps short of the end.
+  const totalMs = durationMs === null && metadataMs === null ? null : Math.max(durationMs ?? 0, metadataMs ?? 0);
 
   // Pause on unmount (thread closed, message deleted) or the audio keeps
   // playing with no visible control left to stop it.
@@ -52,7 +55,10 @@ export function VoiceNotePlayer({
     if (audio.paused) {
       if (activeAudio && activeAudio !== audio) activeAudio.pause();
       activeAudio = audio;
-      void audio.play().catch(() => setPlaying(false));
+      void audio.play().catch(() => {
+        setPlaying(false);
+        setFailed(true);
+      });
     } else {
       audio.pause();
     }
@@ -81,15 +87,22 @@ export function VoiceNotePlayer({
           const seconds = event.currentTarget.duration;
           if (Number.isFinite(seconds)) setMetadataMs(seconds * 1000);
         }}
+        onError={() => {
+          setFailed(true);
+          setPlaying(false);
+        }}
       >
-        <source src={src} type={mime ?? undefined} />
+        {/* A failing <source> fires error on the source element, not the media
+            element — without this handler a dead URL leaves an inert button. */}
+        <source src={src} type={mime ?? undefined} onError={() => setFailed(true)} />
       </audio>
 
       <button
         type="button"
-        aria-label={playing ? "Pause voice message" : "Play voice message"}
+        aria-label={failed ? "Voice message unavailable" : playing ? "Pause voice message" : "Play voice message"}
+        disabled={failed}
         onClick={toggle}
-        className="grid size-8 shrink-0 place-items-center rounded-full bg-current/15 transition-transform active:scale-95"
+        className="grid size-8 shrink-0 place-items-center rounded-full bg-current/15 transition-transform active:scale-95 disabled:opacity-50"
       >
         {playing ? <Pause size={14} /> : <Play size={14} className="translate-x-px" />}
       </button>
@@ -102,13 +115,13 @@ export function VoiceNotePlayer({
           max={Math.max(totalMs ?? 0, 1)}
           step={100}
           value={Math.min(positionMs, totalMs ?? positionMs)}
-          disabled={totalMs === null}
+          disabled={totalMs === null || failed}
           onChange={(event) => seek(Number(event.target.value))}
           className="h-1 w-full min-w-0 cursor-pointer accent-current disabled:cursor-default"
         />
         <span className="text-[11px] tabular-nums opacity-70">
-          {formatClock(positionMs)}
-          {totalMs !== null && ` / ${formatClock(totalMs)}`}
+          {failed ? "Couldn't load" : formatClock(positionMs)}
+          {!failed && totalMs !== null && ` / ${formatClock(totalMs)}`}
         </span>
       </span>
     </span>
