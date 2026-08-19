@@ -516,13 +516,14 @@ export function ChatThread({
         {announcement}
       </p>
 
-      {!selectMode && (
-        <MessageComposer
-          conversationId={conversation.id}
-          members={conversation.members}
-          isGroup={conversation.type === "GROUP"}
-        />
-      )}
+      {/* Hidden, not unmounted: unmounting would silently discard a live
+          recording, a pending voice take, and the reply/edit strips. */}
+      <MessageComposer
+        conversationId={conversation.id}
+        members={conversation.members}
+        isGroup={conversation.type === "GROUP"}
+        hidden={selectMode}
+      />
 
       <ForwardDialog
         open={forwarding !== null}

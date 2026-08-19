@@ -16,7 +16,7 @@ import {
 import { EMOJI_GROUPS } from "@/lib/chat/emoji";
 import { subscribeDrafts, getDraft, setDraft } from "@/lib/chat/draft-store";
 import { useTypingEmitter } from "@/lib/hooks/use-typing";
-import { useVoiceRecorder } from "@/lib/hooks/use-voice-recorder";
+import { useVoiceRecorder, type VoiceRecording } from "@/lib/hooks/use-voice-recorder";
 import { formatClock } from "./voice-note-player";
 import { cn } from "@/lib/utils";
 import type { ChatMember } from "@/lib/chat/types";
@@ -32,6 +32,10 @@ const COUNTER_VISIBLE_FROM = MESSAGE_MAX_LENGTH - 400;
 // Deliberately no MEDIA_RULES.audio here — voice notes are recorder-only, and
 // a picked .mp3 would fail the sniff allowlist anyway.
 const ACCEPT = [...MEDIA_RULES.image.mimes, ...MEDIA_RULES.video.mimes, ...MEDIA_RULES.file.mimes].join(",");
+
+// The server sniffs containers, not tracks: an audio-declared webm/mp4 stores
+// as VIDEO (lib/media/sniff.ts), so its cap is video's 20MB. Ogg really is audio.
+const CONTAINER_KIND: Partial<Record<string, MediaKind>> = { "audio/webm": "video", "audio/mp4": "video" };
 
 /** What POST /api/upload/chat-media answers with. */
 type ChatMediaUploadResponse = {
@@ -61,10 +65,13 @@ export function MessageComposer({
   conversationId,
   members,
   isGroup,
+  hidden,
 }: {
   conversationId: string;
   members: ChatMember[];
   isGroup: boolean;
+  /** display:none, not unmount — a live recording or pending take must survive. */
+  hidden?: boolean;
 }) {
   const {
     connection,
@@ -84,6 +91,9 @@ export function MessageComposer({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [error, setError] = useState<string | undefined>();
   const [uploading, setUploading] = useState(false);
+  // A finished take, held until its upload succeeds — a failed send keeps it
+  // so the user can retry instead of losing the recording.
+  const [pendingTake, setPendingTake] = useState<VoiceRecording | null>(null);
   const [saving, setSaving] = useState(false);
   const [caret, setCaret] = useState(0);
 
@@ -235,9 +245,11 @@ export function MessageComposer({
     // Per-kind cap, not MEDIA_MAX_BYTES: the global max is the video cap, so a
     // 6MB image would pass here only to fail at the upload route. Unknown types
     // fall back to the global cap and let the server's sniff decide.
-    const kind = (Object.keys(MEDIA_RULES) as MediaKind[]).find((key) =>
-      (MEDIA_RULES[key].mimes as readonly string[]).includes(file.type),
-    );
+    const kind =
+      CONTAINER_KIND[file.type] ??
+      (Object.keys(MEDIA_RULES) as MediaKind[]).find((key) =>
+        (MEDIA_RULES[key].mimes as readonly string[]).includes(file.type),
+      );
     const maxBytes = kind ? MEDIA_RULES[kind].maxBytes : MEDIA_MAX_BYTES;
     if (file.size > maxBytes) {
       setError(`That file is too large — the limit is ${Math.floor(maxBytes / (1024 * 1024))}MB`);
@@ -279,47 +291,69 @@ export function MessageComposer({
   }
 
   async function sendVoiceNote() {
-    const recording = await recorder.finish();
-    if (!recording) return;
-    // Two deliberate taps under half a second apart is an accident, not a message.
-    if (recording.durationMs < 500) return;
-    if (recording.blob.size > MEDIA_RULES.audio.maxBytes) {
-      setError("That recording is too long to send");
-      return;
-    }
-
-    setError(undefined);
+    if (uploading) return;
+    // Before finish(): `disabled={uploading}` must cover the stop-and-flush
+    // window too, or a double tap races finish() against itself.
     setUploading(true);
-    const form = new FormData();
-    form.append("conversationId", conversationId);
-    // The route can't tell an audio-only container from a video by its bytes —
-    // this is the explicit voice-note intent it re-types on.
-    form.append("voice", "1");
-    form.append("file", new File([recording.blob], "Voice message", { type: recording.mime }));
-    const res = await apiUpload<ChatMediaUploadResponse>("/api/upload/chat-media", form);
-    setUploading(false);
+    try {
+      const recording = pendingTake ?? (await recorder.finish());
+      if (!recording) {
+        setError("Nothing was recorded — try again.");
+        return;
+      }
+      // Two deliberate taps under half a second apart is an accident, not a message.
+      if (recording.durationMs < 500) {
+        setError("Hold the mic a little longer to record a message.");
+        return;
+      }
+      if (recording.blob.size > MEDIA_RULES.audio.maxBytes) {
+        setError("That recording is too long to send");
+        setPendingTake(null);
+        return;
+      }
 
-    if (!res.ok) {
-      setError(res.data.error ?? GENERIC_ERROR);
-      return;
+      setError(undefined);
+      setPendingTake(recording);
+      const form = new FormData();
+      form.append("conversationId", conversationId);
+      // The route can't tell an audio-only container from a video by its bytes —
+      // this is the explicit voice-note intent it re-types on.
+      form.append("voice", "1");
+      form.append("file", new File([recording.blob], "Voice message", { type: recording.mime }));
+      const res = await apiUpload<ChatMediaUploadResponse>("/api/upload/chat-media", form);
+
+      if (!res.ok) {
+        // pendingTake survives: the strip stays up and send retries the upload.
+        setError(res.data.error ?? GENERIC_ERROR);
+        return;
+      }
+
+      setPendingTake(null);
+      sendMessage({
+        clientMsgId: newClientMsgId(),
+        conversationId,
+        type: res.data.type,
+        body: null,
+        mediaUrl: res.data.mediaUrl,
+        mediaMime: res.data.mediaMime,
+        mediaSize: res.data.mediaSize,
+        mediaName: res.data.mediaName,
+        // The client's stopwatch as fallback: the optimistic bubble should show a
+        // total even if Cloudinary's probe came up empty.
+        mediaDurationMs: res.data.mediaDurationMs ?? recording.durationMs,
+        mediaToken: res.data.mediaToken,
+        replyToId: reply?.messageId ?? null,
+      });
+      setReply(conversationId, null);
+    } finally {
+      setUploading(false);
     }
+  }
 
-    sendMessage({
-      clientMsgId: newClientMsgId(),
-      conversationId,
-      type: res.data.type,
-      body: null,
-      mediaUrl: res.data.mediaUrl,
-      mediaMime: res.data.mediaMime,
-      mediaSize: res.data.mediaSize,
-      mediaName: res.data.mediaName,
-      // The client's stopwatch as fallback: the optimistic bubble should show a
-      // total even if Cloudinary's probe came up empty.
-      mediaDurationMs: res.data.mediaDurationMs ?? recording.durationMs,
-      mediaToken: res.data.mediaToken,
-      replyToId: reply?.messageId ?? null,
-    });
-    setReply(conversationId, null);
+  function discardTake() {
+    recorder.cancel();
+    setPendingTake(null);
+    setError(undefined);
   }
 
   return (
@@ -328,7 +362,7 @@ export function MessageComposer({
         event.preventDefault();
         void submit();
       }}
-      className="bg-background/80 shrink-0 border-t p-2 backdrop-blur md:p-3"
+      className={cn("bg-background/80 shrink-0 border-t p-2 backdrop-blur md:p-3", hidden && "hidden")}
     >
       {connection === "offline" && (
         <p role="status" className="text-muted-foreground pb-2 text-center text-xs">
@@ -400,15 +434,16 @@ export function MessageComposer({
       )}
 
       {/* Recording swaps the whole input row for a strip: timer, cancel, send.
-          The reply strip above stays — a voice note can be a reply. */}
-      {recorder.status !== "idle" ? (
+          The reply strip above stays — a voice note can be a reply. The strip
+          also holds a finished take whose upload failed, so send can retry. */}
+      {recorder.status !== "idle" || pendingTake !== null ? (
         <div className="flex items-center gap-1.5">
           <Button
             type="button"
             size="icon-lg"
             variant="ghost"
             aria-label="Discard recording"
-            onClick={recorder.cancel}
+            onClick={discardTake}
             className="size-10 shrink-0 rounded-full md:size-9"
           >
             <Trash2 />
@@ -421,10 +456,10 @@ export function MessageComposer({
               )}
             />
             <span className="text-sm tabular-nums">
-              {formatClock(recorder.elapsedMs)} / {formatClock(VOICE_NOTE_MAX_MS)}
+              {formatClock(pendingTake?.durationMs ?? recorder.elapsedMs)} / {formatClock(VOICE_NOTE_MAX_MS)}
             </span>
             <span role="status" className="text-muted-foreground min-w-0 truncate text-xs">
-              {recorder.status === "stopped" ? "Max length reached" : "Recording…"}
+              {pendingTake ? "Ready to send" : recorder.status === "stopped" ? "Max length reached" : "Recording…"}
             </span>
           </span>
           <Button

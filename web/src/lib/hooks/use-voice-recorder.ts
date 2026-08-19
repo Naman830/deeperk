@@ -134,8 +134,17 @@ export function useVoiceRecorder(maxMs: number) {
     setElapsedMs(0);
   }, [stopRecorder]);
 
-  // Unmount (navigating away mid-recording) must release the mic.
-  useEffect(() => cancel, [cancel]);
+  // Unmount (navigating away mid-recording) must release the mic — without
+  // setState, which is an impure no-op once the component is gone.
+  useEffect(
+    () => () => {
+      stopRecorder();
+      recorderRef.current = null;
+      stoppedRef.current = null;
+      chunksRef.current = [];
+    },
+    [stopRecorder],
+  );
 
   return { status, elapsedMs, start, finish, cancel };
 }
