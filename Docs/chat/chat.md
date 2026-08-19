@@ -101,6 +101,9 @@ Live messages arrive over the socket; history is a bulk HTTP fetch — same spli
 
 ```
 Socket connects   → isOnline = true  → broadcast presence:online   (only if onlineStatus allows the viewer, per privacy_settings)
+                  → the connecting socket also receives presence:snapshot — the co-members
+                    already online (privacy-filtered, online-only). Transition broadcasts
+                    can't reach a socket that wasn't connected when they fired.
 Socket disconnects → isOnline = false, lastSeenAt = now() → broadcast presence:offline
 
 You type       → socket.emit('typing:start') → relayed to the conversation room

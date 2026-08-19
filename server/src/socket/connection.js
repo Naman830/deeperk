@@ -87,6 +87,19 @@ function registerConnectionHandlers(io, bootId) {
         console.error("[socket:presence-online]", error);
       }
     }
+
+    // Presence snapshot for THIS socket: transition broadcasts can't reach a
+    // socket that wasn't connected when they fired, so without this a page
+    // that loads while a co-member is already online shows them offline until
+    // their next transition. Online-only and privacy-filtered in the service.
+    try {
+      const onlineCoMembers = await presence.onlineSnapshotFor(userId, conversationIds);
+      if (onlineCoMembers.length > 0) {
+        socket.emit("presence:snapshot", { online: onlineCoMembers });
+      }
+    } catch (error) {
+      console.error("[socket:presence-snapshot]", error);
+    }
   });
 }
 

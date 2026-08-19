@@ -502,6 +502,30 @@ describe("socket chat", () => {
     await readBySilence;
   });
 
+  it("presence:snapshot tells a connecting socket who is already online, privacy-filtered", async () => {
+    const early = await createUser("scse");
+    const late = await createUser("scsl");
+    const nobody = await createUser("scsn");
+    await createDirect(early, late);
+    await createDirect(nobody, late);
+    // BEFORE nobody's first socket event — the server memoizes privacy for 60s.
+    const patched = await nobody.api.patch("/api/me/privacy", { json: { onlineStatus: "NOBODY" } });
+    expect(patched.status).toBe(200);
+
+    const earlySession = await connectAs(early.api);
+    const nobodySession = await connectAs(nobody.api);
+    expect(earlySession.userId).toBe(early.userId);
+    expect(nobodySession.userId).toBe(nobody.userId);
+
+    // Transition broadcasts fired before this socket existed — the snapshot is
+    // the only way `late` can learn `early` is already online. A NOBODY user
+    // must be absent, not listed as offline: absence is the privacy contract.
+    const lateSession = await connectAs(late.api);
+    const snapshot = await waitFor<{ online: string[] }>(lateSession.socket, "presence:snapshot", () => true);
+    expect(snapshot.online).toContain(early.userId);
+    expect(snapshot.online).not.toContain(nobody.userId);
+  });
+
   it("the 31st message in a 10s window is RATE_LIMITED", async () => {
     const rl = await createUser("scrl");
     const partner = await createUser("scrlb");

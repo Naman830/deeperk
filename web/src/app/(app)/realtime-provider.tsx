@@ -313,6 +313,20 @@ export function RealtimeProvider({
       setPresence((current) => ({ ...current, [userId]: { isOnline: false, lastSeenAt: lastSeenAt ?? null } }));
     };
 
+    // Sent once per connect: co-members already online when this socket joined.
+    // Transition events can't reach a socket that wasn't connected when they
+    // fired, so without this a page that loads mid-session shows a stale
+    // "offline" until the co-member's NEXT transition. Upgrade-only merge —
+    // absence from the snapshot proves nothing (privacy-hidden users are
+    // simply omitted), so nobody is marked offline here.
+    const onPresenceSnapshot = ({ online }: { online: string[] }) => {
+      setPresence((current) => {
+        const next = { ...current };
+        for (const userId of online) next[userId] = { isOnline: true, lastSeenAt: null };
+        return next;
+      });
+    };
+
     const onTypingStart = ({
       conversationId,
       userId,
@@ -464,6 +478,7 @@ export function RealtimeProvider({
     socket.on("conversation:delivered", onDeliveredBy);
     socket.on("presence:online", onPresenceOnline);
     socket.on("presence:offline", onPresenceOffline);
+    socket.on("presence:snapshot", onPresenceSnapshot);
     socket.on("typing:start", onTypingStart);
     socket.on("typing:stop", onTypingStop);
     socket.on("conversation:added", onConversationAdded);
@@ -482,10 +497,11 @@ export function RealtimeProvider({
       socket.off("message:deleted", onMessageDeleted);
       socket.off("message:hidden", onMessageHidden);
       socket.off("message:edited", onMessageEdited);
-        socket.off("conversation:read-by", onReadBy);
+      socket.off("conversation:read-by", onReadBy);
       socket.off("conversation:delivered", onDeliveredBy);
       socket.off("presence:online", onPresenceOnline);
       socket.off("presence:offline", onPresenceOffline);
+      socket.off("presence:snapshot", onPresenceSnapshot);
       socket.off("typing:start", onTypingStart);
       socket.off("typing:stop", onTypingStop);
       socket.off("conversation:added", onConversationAdded);

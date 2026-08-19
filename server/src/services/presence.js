@@ -1,8 +1,8 @@
 const { db, schema, ops } = require("../config/db");
 const { env } = require("../config/env");
 
-const { user, privacySettings } = schema;
-const { eq, sql } = ops;
+const { user, privacySettings, conversationMember } = schema;
+const { and, eq, inArray, sql } = ops;
 
 /**
  * Presence (Docs/chat/chat.md §2.6).
@@ -101,6 +101,39 @@ async function readPresencePrivacy(userId) {
   return (rows[0]?.onlineStatus ?? "EVERYONE") === "EVERYONE";
 }
 
+/**
+ * The online co-members a connecting socket should see, privacy-filtered.
+ *
+ * Transition events can't reach a socket that wasn't connected when they
+ * fired, so a page that loads while a co-member is already online would show
+ * them offline until their NEXT transition — forever, in practice. The
+ * snapshot lists online users only: it can upgrade a stale "offline", never
+ * wrongly downgrade, and a privacy-hidden user is simply absent (the same
+ * key-absence contract the REST reads use).
+ */
+async function onlineSnapshotFor(userId, conversationIds) {
+  const candidates = onlineUserIds().filter((id) => id !== userId);
+  if (candidates.length === 0 || conversationIds.length === 0) return [];
+  const rows = await db
+    .selectDistinct({ userId: conversationMember.userId })
+    .from(conversationMember)
+    .where(
+      and(
+        inArray(conversationMember.conversationId, conversationIds),
+        inArray(conversationMember.userId, candidates),
+      ),
+    );
+  const visible = [];
+  for (const row of rows) {
+    // Re-check count(): the candidate may have disconnected during the query.
+    // readsPresencePublicly is the same 60s memo the transition broadcasts use.
+    if (count(row.userId) > 0 && (await readsPresencePublicly(row.userId))) {
+      visible.push(row.userId);
+    }
+  }
+  return visible;
+}
+
 async function markOnline(userId) {
   await db.update(user).set({ isOnline: true }).where(eq(user.id, userId));
 }
@@ -140,6 +173,7 @@ module.exports = {
   remove,
   count,
   onlineUserIds,
+  onlineSnapshotFor,
   readsPresencePublicly,
   markOnline,
   markOffline,

@@ -180,7 +180,7 @@ pinned by `tests/specs/00-contracts.spec.ts`.
 | --- | --- |
 | Messaging | `message:new` · `message:edited` · `message:deleted` · `message:hidden` |
 | Receipts | `conversation:read-by` · `conversation:read-sync` · `conversation:delivered` · `conversation:self-changed` |
-| Presence | `presence:online` · `presence:offline` · `session:ready` |
+| Presence | `presence:online` · `presence:offline` · `presence:snapshot` (connect-time: co-members already online, privacy-filtered) · `session:ready` |
 | Calls | `call:ring` · `call:ring-cancelled` · `call:ring-handled` · `call:started` · `call:participant-joined` · `call:participant-left` · `call:ended` |
 
 Failure acks are always the flat shape `{ ok: false, code, error }`;
