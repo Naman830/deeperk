@@ -4,6 +4,9 @@ Drives the **real** dev servers against the **real** Neon DB. There are no mocks
 REST routes, the Socket.IO server, the internal event bridge, Cloudinary and the
 DB-backed rate limiter are all exercised as deployed code paths.
 
+Two suites share this contract: the vitest API/socket suite (`specs/`) and the
+Playwright browser suite (`browser/` — see [Browser suite](#browser-suite-playwright)).
+
 ## Running
 
 ```bash
@@ -52,6 +55,49 @@ Env comes from the same files the servers read (root `.env`, `server/.env`,
   account: assert only on fixture-owned `avatars/<userId>/` prefixes, and use
   `>=` on the report's global counters.
 
+## Browser suite (Playwright)
+
+`browser/` drives the real UI in real Chromium against the same running dev
+servers and the same Neon DB, under the same fixture + cleanup contract as the
+vitest suite (`cleanupAll()` runs in its global setup and teardown too).
+
+```bash
+npm run dev             # both servers, same as above
+npm run test:browser    # full browser suite, serial, ~2 min warm
+npx playwright test --config tests/playwright.config.ts tests/browser/40-call.spec.ts  # one file
+```
+
+- **Projects**: `desktop` (Desktop Chrome) runs every spec; `mobile` (Pixel 7)
+  runs only specs whose title contains `@mobile` (those also match the desktop
+  project and self-skip there via an `isMobile` guard).
+- **Fake media flags**: both projects launch Chromium with
+  `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream` — a
+  tone-generating fake mic plus auto-granted permission prompts. That is what
+  lets the voice-note spec drive the **real MediaRecorder** and the call spec
+  drive **real WebRTC** headlessly.
+- **x-forwarded-for is load-bearing**: the config's `extraHTTPHeaders` stamps
+  every browser request with the per-run TEST-NET-3 address, so IP-keyed
+  buckets (`signup-create:<ip>` is 3/hr!) never key on 127.0.0.1 — a bucket
+  the cleanup never sweeps. Manually created contexts don't inherit `use`
+  options, so `browser/support/helpers.ts`'s `newUserContext()` re-applies it;
+  never call `browser.newContext()` directly in a spec.
+- **Sessions**: specs never drive the login form except in `10-auth` — fixture
+  users are REST-seeded (`createUser`) and their cookies adopted into the
+  context via `browser/support/session.ts`.
+- **Artifacts**: each flow screenshots its milestones into
+  `browser/artifacts/<flow>/<nn>-<step>.png` (gitignored; the user-review
+  deliverable). A flow's folder is reset on its first shot of a run, so it
+  always holds exactly one run's worth. Failure screenshots/videos land in
+  `browser/test-results/` instead.
+- **Call timers**: `40-call.spec.ts` assumes the short values in `server/.env`
+  (`CALL_RING_TIMEOUT_MS=5000`) — with the 30s default the missed-call test
+  would outwait its expects.
+- **Scope decision**: recorder/player *unit* tests (`use-voice-recorder`,
+  `VoiceNotePlayer`) are deliberately out of scope — the browser voice-note
+  flow exercises the real MediaRecorder, real Cloudinary upload and real
+  `<audio>` playback end to end, which is the evidence the unit-test gap
+  analysis actually wanted.
+
 ## Why the suite is serial
 
 One shared `next dev` (compile-on-first-hit) plus per-user in-memory socket
@@ -86,10 +132,11 @@ must turn the named spec red; if it stays green the harness is decorative:
 
 ## Deliberately out of scope
 
-Call media (real WebRTC needs a browser — Playwright is the follow-up; the
-signaling contract is covered in `65-socket-call`), email deliverability
-beyond the flag-gated sends, provider
-outage paths (Brevo/Cloudinary 5xx need fault injection), load/perf, and
-browser-level interaction (Playwright is the follow-up when visual coverage is
-wanted). CI orchestration (booting `next start` + the socket server inside
-global setup on alternate ports) is the documented next step for the harness.
+Call media in *vitest* (real WebRTC needs a browser — covered now by the
+[browser suite](#browser-suite-playwright)'s `40-call.spec.ts`; the signaling
+contract stays covered in `65-socket-call`), email deliverability beyond the
+flag-gated sends, provider outage paths (Brevo/Cloudinary 5xx need fault
+injection), and load/perf. Browser-level interaction is no longer out of
+scope — it lives in the [browser suite](#browser-suite-playwright). CI
+orchestration (booting `next start` + the socket server inside global setup on
+alternate ports) is the documented next step for the harness.

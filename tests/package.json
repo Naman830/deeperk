@@ -2,6 +2,7 @@
   "name": "tests",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "End-to-end harness: drives the real Next + socket servers against the real Neon DB.",
   "devDependencies": {
     "@playwright/test": "1.62.1",
