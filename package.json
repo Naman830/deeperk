@@ -13,7 +13,8 @@
   "scripts": {
     "dev": "concurrently \"npm run dev -w web\" \"npm run dev -w server\"",
     "test": "vitest run --root tests",
-    "test:watch": "vitest --root tests"
+    "test:watch": "vitest --root tests",
+    "test:browser": "playwright test --config tests/playwright.config.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

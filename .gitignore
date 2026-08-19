@@ -13,3 +13,7 @@ node_modules/
 *.log
 
 CLAUDE.md
+# playwright browser-test output
+tests/browser/artifacts/
+tests/browser/test-results/
+tests/playwright-report/
