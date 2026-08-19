@@ -1,4 +1,4 @@
-# Calls — Audio & Video on ChatSphere
+# Calls — Audio & Video on Deeperk
 
 Picks up after [`chat.md`](../chat/chat.md). A call always belongs to a conversation (`DIRECT` or `GROUP`) and reuses everything chat already built: the same authenticated Socket.IO connection and handshake (chat.md §2.1), the same room-per-conversation model, and the same rule that the server — never the client — decides who's allowed to do what.
 

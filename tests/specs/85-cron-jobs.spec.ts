@@ -100,7 +100,7 @@ describe.skipIf(!config.cronSecret)("nightly cron jobs", () => {
     await db.insert(schema.pendingContactChange).values({
       userId: doomed.userId,
       type: "EMAIL",
-      newValue: `${doomed.username}.new@chatsphere-e2e.test`,
+      newValue: `${doomed.username}.new@deeperk-e2e.test`,
       otpHash: "deadbeef",
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });

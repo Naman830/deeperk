@@ -19,7 +19,7 @@ describe("auth", () => {
 
   it("sign-in with no Origin header is a 403 MISSING_OR_NULL_ORIGIN", async () => {
     const res = await newApi().post("/api/auth/sign-in/email", {
-      json: { email: `zz.e2e.auorigin${RUN_ID}@chatsphere-e2e.test`, password: PASSWORD },
+      json: { email: `zz.e2e.auorigin${RUN_ID}@deeperk-e2e.test`, password: PASSWORD },
       origin: null,
     });
     expect(res.status).toBe(403);
@@ -31,7 +31,7 @@ describe("auth", () => {
 
   it("unknown email and wrong password answer identically (anti-enumeration)", async () => {
     const unknown = await newApi().post("/api/auth/sign-in/email", {
-      json: { email: `zz.e2e.aughost${RUN_ID}@chatsphere-e2e.test`, password: "Wrong.password123" },
+      json: { email: `zz.e2e.aughost${RUN_ID}@deeperk-e2e.test`, password: "Wrong.password123" },
     });
     const wrongPassword = await newApi().post("/api/auth/sign-in/email", {
       json: { email: fixture.email, password: "Wrong.password123" },
@@ -72,7 +72,7 @@ describe("auth", () => {
 
   it("check-email: fresh address is available, fixture email is taken", async () => {
     const api = newApi();
-    const freshEmail = `zz.e2e.aufresh${RUN_ID}@chatsphere-e2e.test`;
+    const freshEmail = `zz.e2e.aufresh${RUN_ID}@deeperk-e2e.test`;
 
     const fresh = await api.post("/api/signup/check-email", { json: { email: freshEmail } });
     expect(fresh.status).toBe(200);

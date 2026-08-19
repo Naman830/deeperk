@@ -5,7 +5,7 @@ import { ApiClient } from "./api";
  * Fixture identity scheme (see tests/README.md for the cleanup contract):
  * - usernames:  zz.e2e.<tag><run><n>   — valid per the app's username pattern,
  *   lowercase, no reserved-word collisions, sorts last in any listing.
- * - emails:     <username>@chatsphere-e2e.test — RFC 6761 reserved TLD, so
+ * - emails:     <username>@deeperk-e2e.test — RFC 6761 reserved TLD, so
  *   even a bug can never send it real mail. Only the deliberately-mailing
  *   flows use TEST_EMAIL.
  * - Creation goes through Better Auth's own POST /api/auth/sign-up/email:
@@ -37,7 +37,7 @@ export function newApi(): ApiClient {
 export async function createUser(rawTag: string): Promise<FixtureUser> {
   const tag = rawTag.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "u";
   const username = `${USERNAME_PREFIX}${tag}${RUN_ID}${(counter++).toString(36)}`;
-  const email = `${username}@chatsphere-e2e.test`;
+  const email = `${username}@deeperk-e2e.test`;
   const api = newApi();
   const res = await api.post("/api/auth/sign-up/email", {
     json: {

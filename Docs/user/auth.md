@@ -1,4 +1,4 @@
-# Authentication — ChatSphere Login & Signup
+# Authentication — Deeperk Login & Signup
 
 Login and Signup are two separate pages (not a single "one door" email screen). Signup checks if the email is already registered and sends people to Login instead; Login never reveals whether an email exists at all — same error either way.
 

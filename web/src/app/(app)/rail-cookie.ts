@@ -10,7 +10,7 @@
 // The theme only uses localStorage because the ROOT layout must stay static, and
 // that constraint doesn't apply here. A theme mismatch is a colour flash; a rail
 // mismatch is a layout shift on an h-dvh flex shell, which is worse.
-export const RAIL_COOKIE = "chatsphere-rail";
+export const RAIL_COOKIE = "deeperk-rail";
 
 const COLLAPSED = "collapsed";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;

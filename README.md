@@ -1,6 +1,6 @@
 <div align="center">
 
-# ChatSphere
+# Deeperk
 
 **Real-time chat and WebRTC audio/video calling — built as a production-shaped monorepo, not a demo.**
 

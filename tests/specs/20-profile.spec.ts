@@ -283,7 +283,7 @@ describe("profile api", () => {
 
     it("wrong password → 400", async () => {
       const res = await mailer.api.post("/api/me/email/start", {
-        json: { password: "Wrong.1234", newEmail: `nope${RUN_ID}@chatsphere-e2e.test` },
+        json: { password: "Wrong.1234", newEmail: `nope${RUN_ID}@deeperk-e2e.test` },
       });
       expect(res.status).toBe(400);
       expect(res.body).toEqual({ error: "Incorrect password" });

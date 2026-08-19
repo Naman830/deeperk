@@ -1,4 +1,4 @@
-# ChatSphere e2e harness
+# Deeperk e2e harness
 
 Drives the **real** dev servers against the **real** Neon DB. There are no mocks:
 REST routes, the Socket.IO server, the internal event bridge, Cloudinary and the

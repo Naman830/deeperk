@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "ChatSphere",
-    template: "%s · ChatSphere",
+    default: "Deeperk",
+    template: "%s · Deeperk",
   },
   description: "Real-time chat and voice/video calling.",
 };

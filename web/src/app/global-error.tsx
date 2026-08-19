@@ -22,7 +22,7 @@ export default function GlobalError({
       <body className="bg-background text-foreground antialiased">
         <main className="grid min-h-dvh place-items-center px-6">
           <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-            <p className="text-sm font-medium">ChatSphere hit an unexpected error</p>
+            <p className="text-sm font-medium">Deeperk hit an unexpected error</p>
             <p className="text-muted-foreground text-sm">
               The app couldn&apos;t recover on its own. Reloading usually fixes it.
             </p>

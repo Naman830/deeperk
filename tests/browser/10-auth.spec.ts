@@ -59,7 +59,7 @@ test.describe("signup", () => {
 
   test("full signup: email → OTP → profile fields → password → signed in", async ({ page }) => {
     const username = `${USERNAME_PREFIX}signup${RUN_ID}`;
-    const email = `${username}@chatsphere-e2e.test`;
+    const email = `${username}@deeperk-e2e.test`;
 
     await page.goto("/signup");
     await page.getByLabel("Email", { exact: true }).fill(email);

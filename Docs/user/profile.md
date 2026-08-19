@@ -1,4 +1,4 @@
-# Profile & Settings — Who You Are on ChatSphere
+# Profile & Settings — Who You Are on Deeperk
 
 Picks up after signup completes in [`auth.md`](./auth.md). Users enter the app immediately — avatar and bio are optional and can be edited later in Settings. Two screens: the public profile (`/u/[username]`) is what others see; Settings (`/settings`) is what only the owner sees — built from a different query than the public one, so a private field can never leak by accident.
 

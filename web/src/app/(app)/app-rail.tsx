@@ -93,7 +93,7 @@ export function AppRail({ defaultCollapsed, username, displayUsername, firstName
       )}
     >
       <div className="hidden md:mb-4 md:flex md:items-center md:justify-between md:gap-2">
-        {!collapsed && <span className="font-heading truncate px-1 text-lg font-semibold tracking-tight">ChatSphere</span>}
+        {!collapsed && <span className="font-heading truncate px-1 text-lg font-semibold tracking-tight">Deeperk</span>}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

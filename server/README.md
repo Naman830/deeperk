@@ -1,4 +1,4 @@
-# ChatSphere — Realtime Server
+# Deeperk — Realtime Server
 
 ![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
@@ -6,7 +6,7 @@
 ![Drizzle ORM](https://img.shields.io/badge/Drizzle-ORM-C5F74F?logo=drizzle&logoColor=black)
 ![Neon](https://img.shields.io/badge/Neon-Postgres-00E599?logo=postgresql&logoColor=white)
 
-The Express + Socket.IO process that powers everything *live* in ChatSphere: message
+The Express + Socket.IO process that powers everything *live* in Deeperk: message
 delivery, typing indicators, presence, read receipts, and WebRTC call signaling.
 
 It is **event-driven, not REST-driven**. Almost all traffic arrives as Socket.IO

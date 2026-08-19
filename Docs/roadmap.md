@@ -1,12 +1,12 @@
-# ChatSphere — build roadmap
+# Deeperk — build roadmap
 
-The historical build log for ChatSphere: the stage-by-stage plan the app was built
+The historical build log for Deeperk: the stage-by-stage plan the app was built
 against, what shipped, and what was deliberately deferred. It lived at the repo root
 until the root [`README.md`](../README.md) became the project's entry point.
 
 This is still the place to tick future work off.
 
-> **Note on links:** while ChatSphere was built, every architectural decision was recorded
+> **Note on links:** while Deeperk was built, every architectural decision was recorded
 > in a `CLAUDE.md` at the repo root. That file is **not committed** (it's in `.gitignore`),
 > so this document states its conclusions inline rather than linking to it. The behavioural
 > specs in [`Docs/`](.) are committed and are the source of truth for *what* the app does.

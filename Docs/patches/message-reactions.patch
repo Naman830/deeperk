@@ -855,7 +855,7 @@ index 247bd70..1d293f8 100644
 +  reactionToasts: boolean;
  };
  
- export const NOTIFICATION_STORAGE_KEY = "chatsphere-notifications";
+ export const NOTIFICATION_STORAGE_KEY = "deeperk-notifications";
 @@ -39,6 +42,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
    toasts: true,
    sound: true,
@@ -863,7 +863,7 @@ index 247bd70..1d293f8 100644
 +  reactionToasts: true,
  };
  
- const PREFS_EVENT = "chatsphere-notifications-change";
+ const PREFS_EVENT = "deeperk-notifications-change";
 @@ -77,6 +81,7 @@ function parse(raw: string | null): NotificationPrefs {
        toasts: parsed.toasts ?? DEFAULTS.toasts,
        sound: parsed.sound ?? DEFAULTS.sound,

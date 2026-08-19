@@ -31,7 +31,7 @@ const ROWS: {
   {
     key: "titleBlink",
     label: "Flash the tab title",
-    description: "Shows the unread count in the browser tab while ChatSphere is in the background.",
+    description: "Shows the unread count in the browser tab while Deeperk is in the background.",
     icon: Type,
   },
   {

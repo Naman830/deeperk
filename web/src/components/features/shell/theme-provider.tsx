@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useSyncExternalStore
 
 export type ThemePreference = "system" | "light" | "dark";
 
-export const THEME_STORAGE_KEY = "chatsphere-theme";
+export const THEME_STORAGE_KEY = "deeperk-theme";
 
 // Runs before first paint (inlined in layout.tsx) so the app never flashes the
 // wrong theme. Keep in sync with applyTheme below — this is the one place the
@@ -21,7 +21,7 @@ function applyTheme(preference: ThemePreference) {
 const DEFAULT_PREFERENCE: ThemePreference = "dark";
 
 // Same-tab notification for setPreference; cross-tab arrives via `storage`.
-const PREFERENCE_EVENT = "chatsphere-theme-change";
+const PREFERENCE_EVENT = "deeperk-theme-change";
 
 function getStoredPreference(): ThemePreference {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);

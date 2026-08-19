@@ -17,7 +17,7 @@ async function send(to: string, subject: string, text: string) {
   const apiKey = process.env.BREVO_API_KEY;
   const email = process.env.BREVO_FROM_EMAIL;
   if (!apiKey || !email) throw new EmailDeliveryError("BREVO_API_KEY / BREVO_FROM_EMAIL are not set");
-  const name = process.env.BREVO_FROM_NAME ?? "ChatSphere";
+  const name = process.env.BREVO_FROM_NAME ?? "Deeperk";
 
   const res = await fetch(ENDPOINT, {
     method: "POST",
@@ -38,8 +38,8 @@ async function send(to: string, subject: string, text: string) {
 export async function sendSignupOtpEmail(email: string, otp: string) {
   await send(
     email,
-    `${otp} is your ChatSphere verification code`,
-    `Your ChatSphere signup verification code is ${otp}. It expires in 5 minutes. If you didn't request this, you can ignore this email.`,
+    `${otp} is your Deeperk verification code`,
+    `Your Deeperk signup verification code is ${otp}. It expires in 5 minutes. If you didn't request this, you can ignore this email.`,
   );
 }
 
@@ -47,8 +47,8 @@ export async function sendSignupOtpEmail(email: string, otp: string) {
 export async function sendForgotPasswordOtpEmail(email: string, otp: string) {
   await send(
     email,
-    `${otp} is your ChatSphere password reset code`,
-    `Your ChatSphere password reset code is ${otp}. It expires in 5 minutes. If you didn't request this, you can ignore this email — your password won't change.`,
+    `${otp} is your Deeperk password reset code`,
+    `Your Deeperk password reset code is ${otp}. It expires in 5 minutes. If you didn't request this, you can ignore this email — your password won't change.`,
   );
 }
 
@@ -56,8 +56,8 @@ export async function sendForgotPasswordOtpEmail(email: string, otp: string) {
 export async function sendEmailChangeOtpEmail(newEmail: string, otp: string) {
   await send(
     newEmail,
-    `${otp} is your ChatSphere email verification code`,
-    `Your ChatSphere email verification code is ${otp}. It expires in 5 minutes. If you didn't request this, you can ignore this email.`,
+    `${otp} is your Deeperk email verification code`,
+    `Your Deeperk email verification code is ${otp}. It expires in 5 minutes. If you didn't request this, you can ignore this email.`,
   );
 }
 
@@ -65,7 +65,7 @@ export async function sendEmailChangeOtpEmail(newEmail: string, otp: string) {
 export async function sendEmailChangedNoticeEmail(oldEmail: string, newEmail: string) {
   await send(
     oldEmail,
-    "Your ChatSphere email address was changed",
-    `Your ChatSphere account's email was changed to ${newEmail}. If you didn't make this change, contact support immediately.`,
+    "Your Deeperk email address was changed",
+    `Your Deeperk account's email was changed to ${newEmail}. If you didn't make this change, contact support immediately.`,
   );
 }

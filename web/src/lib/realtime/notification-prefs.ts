@@ -31,7 +31,7 @@ export type NotificationPrefs = {
   ringtone: boolean;
 };
 
-export const NOTIFICATION_STORAGE_KEY = "chatsphere-notifications";
+export const NOTIFICATION_STORAGE_KEY = "deeperk-notifications";
 
 // Everything on. A messenger that silently notifies you of nothing until you
 // find the settings page is a broken messenger.
@@ -42,7 +42,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   ringtone: true,
 };
 
-const PREFS_EVENT = "chatsphere-notifications-change";
+const PREFS_EVENT = "deeperk-notifications-change";
 
 // One frozen object, returned whenever the stored value is absent or unusable.
 // getSnapshot must be referentially stable between calls or React throws

@@ -1,4 +1,4 @@
-# User Search — Finding People to Message on ChatSphere
+# User Search — Finding People to Message on Deeperk
 
 Picks up after [`profile.md`](./profile.md). `privacy_settings.discoverable` (profile.md §3) only means something once there's an actual way to find someone — this is that way. It's also the missing piece [`chat.md`](../chat/chat.md) §2.2 already assumes exists: *"Click 'Message' on someone's profile or a search result."* This doc is that search result.
 

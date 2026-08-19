@@ -1,4 +1,4 @@
-# Deploying ChatSphere — free tier, step by step
+# Deploying Deeperk — free tier, step by step
 
 This guide takes a fresh clone of this repo to a live, publicly reachable deployment for **$0/month**. It assumes nothing beyond a GitHub account and basic terminal use.
 
@@ -14,14 +14,14 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
 
 ```
                        ┌─────────────────────────────┐
-  browser ────────────►│  Vercel  (chatsphere.vercel.app)
+  browser ────────────►│  Vercel  (deeperk.vercel.app)
                        │  Next.js: pages + /api/*    │
                        │  /socket.io/* ── rewrite ───┼──┐
                        └──────────────┬──────────────┘  │
                                       │ SOCKET_INTERNAL_URL
                                       ▼                 ▼
                        ┌─────────────────────────────────┐
-                       │  Render  (chatsphere-socket.onrender.com)
+                       │  Render  (deeperk-socket.onrender.com)
                        │  Express + Socket.IO            │
                        └──────────────┬──────────────────┘
                                       │
@@ -31,7 +31,7 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
 
 ## Why this exact topology (read before changing it)
 
-- **The browser never connects to the Render URL directly.** The session cookie is host-only (`chatsphere.vercel.app`), so a socket connection to `*.onrender.com` would arrive with **no cookie** and `server/src/middlewares/auth.js` would reject every handshake. Instead, `web/next.config.ts` has a rewrite that proxies `/socket.io/*` from the web origin to the socket server — the browser talks to one origin only, and the cookie flows. This is the topology `server/src/middlewares/auth.js` documents as the only correct one.
+- **The browser never connects to the Render URL directly.** The session cookie is host-only (`deeperk.vercel.app`), so a socket connection to `*.onrender.com` would arrive with **no cookie** and `server/src/middlewares/auth.js` would reject every handshake. Instead, `web/next.config.ts` has a rewrite that proxies `/socket.io/*` from the web origin to the socket server — the browser talks to one origin only, and the cookie flows. This is the topology `server/src/middlewares/auth.js` documents as the only correct one.
 - **Consequence: no WebSocket upgrade in production.** Vercel rewrites cannot proxy a WebSocket upgrade, so engine.io's upgrade probe fails and the connection stays on **HTTP long-polling**. This is graceful and automatic — chat, presence and typing indicators all work, with slightly more request overhead. Do not "fix" this by pointing `NEXT_PUBLIC_SOCKET_URL` at the Render URL; that breaks auth entirely (see above).
 - **Exactly one socket server instance.** Presence tracking is in-memory and the boot-time "everyone offline" reset assumes a single process (`SOCKET_SINGLE_INSTANCE=true`). Render free runs one instance — fine. Never scale it to 2+ without the Redis adapter work described in `server/src/config/env.js`.
 
@@ -68,7 +68,7 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
 ## Step 2 — Brevo (email)
 
 1. **SMTP & API → API Keys tab → Generate a new API key** → this is `BREVO_API_KEY`. **It must start with `xkeysib-`.** The neighbouring *SMTP* tab issues `xsmtpsib-` keys for the SMTP relay; they look identical in length but the REST API rejects them with `401 "Key not found"`, which looks like a revoked key rather than the wrong kind. Verify with `curl -H "api-key: $BREVO_API_KEY" https://api.brevo.com/v3/account`.
-2. **Senders, Domains & IPs → Senders → Add a sender.** Enter the address you want mail to come from (a plain Gmail address is fine — **no domain and no DNS records needed**), then enter the 6-digit code Brevo emails to it. Set `BREVO_FROM_EMAIL` to that address and `BREVO_FROM_NAME` to `ChatSphere`.
+2. **Senders, Domains & IPs → Senders → Add a sender.** Enter the address you want mail to come from (a plain Gmail address is fine — **no domain and no DNS records needed**), then enter the 6-digit code Brevo emails to it. Set `BREVO_FROM_EMAIL` to that address and `BREVO_FROM_NAME` to `Deeperk`.
 3. **Security → Authorised IPs — check this, it is NOT reliably off.** Brevo challenges calls from unrecognised IPs even on a fresh account with a valid key, answering `401 "We have detected you are using an unrecognised IP address ..."`. Authorise your IP at <https://app.brevo.com/security/authorised_ips> (Brevo usually emails you a link too).
 
 > **⚠ This matters for production, not just local testing.** Vercel's egress IPs rotate and can't be allow-listed ahead of time, so **IP restriction must be disabled** on the Brevo account before deploying — otherwise sends fail intermittently with a 401 that looks identical to a bad API key.
@@ -111,7 +111,7 @@ Environment variables (Render dashboard → Environment):
 | `ICE_SERVERS` | *(optional — see "WebRTC calls: TURN" below)* JSON array of `{"urls": …}` objects handed to callers in signaling acks. Unset = Google STUN only. **Malformed JSON makes the server refuse to start** (a crash-loop on Render) — deliberate, so a typo'd TURN config can never silently degrade calls to STUN-only |
 | `CALL_RING_TIMEOUT_MS` / `CALL_DISCONNECT_GRACE_MS` | *(optional)* ring timeout / mid-call reconnect grace; defaults 30000 / 15000 |
 
-Deploy, then note your service URL, e.g. `https://chatsphere-socket.onrender.com`. Verify: opening `<render-url>/healthz` in a browser returns `{"ok":true,…}` (first hit after idle takes 30–60 s — see "Free-tier realities" below).
+Deploy, then note your service URL, e.g. `https://deeperk-socket.onrender.com`. Verify: opening `<render-url>/healthz` in a browser returns `{"ok":true,…}` (first hit after idle takes 30–60 s — see "Free-tier realities" below).
 
 ## Step 5 — Vercel (web app)
 
@@ -133,7 +133,7 @@ Environment variables (add for Production):
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | `https://<your-app>.vercel.app` |
 | `BREVO_API_KEY` | from Step 2 |
 | `BREVO_FROM_EMAIL` | the sender address you verified in Step 2 |
-| `BREVO_FROM_NAME` | `ChatSphere` |
+| `BREVO_FROM_NAME` | `Deeperk` |
 | `CLOUDINARY_CLOUD_NAME` | from Step 3 |
 | `CLOUDINARY_API_KEY` | from Step 3 |
 | `CLOUDINARY_API_SECRET` | from Step 3 |

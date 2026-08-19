@@ -1,4 +1,4 @@
-# Chat — Direct Messages & Groups on ChatSphere
+# Chat — Direct Messages & Groups on Deeperk
 
 Picks up after [`profile.md`](./profile.md). This is the first thing built on the **second server** — `server/`, the Socket.IO real-time server described in the root [`README.md`](../../README.md) §4, on port 4000.
 

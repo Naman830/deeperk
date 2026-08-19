@@ -58,7 +58,7 @@ export function LoginForm() {
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 px-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
-        <p className="text-muted-foreground text-sm">Welcome back to ChatSphere.</p>
+        <p className="text-muted-foreground text-sm">Welcome back to Deeperk.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">

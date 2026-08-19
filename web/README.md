@@ -1,4 +1,4 @@
-# ChatSphere — Web App
+# Deeperk — Web App
 
 ![Next.js](https://img.shields.io/badge/Next.js-16.3-000000?logo=next.js&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
@@ -8,7 +8,7 @@
 ![Drizzle ORM](https://img.shields.io/badge/Drizzle-ORM-C5F74F?logo=drizzle&logoColor=black)
 ![Vercel](https://img.shields.io/badge/Deploys_to-Vercel-000000?logo=vercel&logoColor=white)
 
-The Next.js face of **ChatSphere** — a real-time chat and calling app. Everything a
+The Next.js face of **Deeperk** — a real-time chat and calling app. Everything a
 user sees and every REST endpoint lives here: OTP-gated signup, profiles with
 granular privacy, people search, a Telegram-grade chat experience, and WebRTC
 audio/video calls. Live delivery itself is handled by the sibling Socket.IO process

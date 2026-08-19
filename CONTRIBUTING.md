@@ -1,4 +1,4 @@
-# Contributing to ChatSphere
+# Contributing to Deeperk
 
 Thanks for taking a look. This guide is short and specific to this repo — it covers the
 things that will silently break if you don't know them, not generic Git advice.

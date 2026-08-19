@@ -34,7 +34,7 @@ test.describe("mobile shell @mobile", () => {
     expect(box).not.toBeNull();
     expect(box!.y + box!.height).toBeGreaterThan(viewport!.height - 2);
     expect(box!.y).toBeGreaterThan(viewport!.height - 100);
-    await expect(nav.getByText("ChatSphere")).toBeHidden();
+    await expect(nav.getByText("Deeperk")).toBeHidden();
     await expect(nav.getByRole("link", { name: /^Chats/ })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Calls" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible();

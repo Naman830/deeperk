@@ -28,6 +28,8 @@ export const RESERVED_USERNAMES = new Set([
   "contact",
   "null",
   "undefined",
+  "deeperk",
+  // Kept from the pre-rename brand so the old handle can never be squatted.
   "chatsphere",
 ]);
 

@@ -255,7 +255,7 @@ export function SignupForm() {
       setError(complete.data.error ?? "Something went wrong. Please try again.");
       return;
     }
-    toast.success("Welcome to ChatSphere!");
+    toast.success("Welcome to Deeperk!");
     router.push("/");
   }
 
