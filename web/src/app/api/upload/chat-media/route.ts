@@ -4,13 +4,14 @@ import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getMembership } from "@/lib/chat/membership";
 import { sniffMedia } from "@/lib/media/sniff";
-import { MEDIA_RULES, MEDIA_MAX_BYTES } from "@/lib/validation/chat";
+import { MEDIA_RULES, MEDIA_MAX_BYTES, VOICE_NOTE_MAX_MS } from "@/lib/validation/chat";
 import { AVATAR_RULES } from "@/lib/validation/profile";
 import {
   uploadAsset,
   CloudinaryNotConfiguredError,
   CHAT_MEDIA_FOLDER,
-  type CloudinaryResourceType,
+  MESSAGE_RESOURCE_TYPE,
+  destroyAsset,
 } from "@/lib/integrations/cloudinary";
 import { signMediaToken, MediaSigningNotConfiguredError, MEDIA_TOKEN_TTL_MS } from "@/lib/chat/media-token";
 import { logServerError } from "@/lib/log";
@@ -23,15 +24,9 @@ const UPLOAD_LIMIT = { windowSeconds: 60, max: 10 }; // 10/minute/user (chat.md 
 // Not in the doc: 10/min x 20MB bounds nothing on a daily Cloudinary bill.
 const DAILY_LIMIT = { windowSeconds: 24 * 60 * 60, max: 100 };
 const ENVELOPE_SLACK = 64 * 1024; // multipart boundary + headers on top of the file
-
-const RESOURCE_TYPE: Record<string, CloudinaryResourceType> = {
-  image: "image",
-  video: "video",
-  // Audio is Cloudinary's resource_type "video", not "raw" — that's what makes
-  // it probe the bytes and hand back the duration the voice bubble depends on.
-  audio: "video",
-  file: "raw",
-};
+// The recorder's 2-min cap is a setTimeout, so a legit cap-hit take can run a
+// few hundred ms over — a slack-free bound would reject the recorder's own output.
+const VOICE_NOTE_SLACK_MS = 2_000;
 
 const MESSAGE_TYPE = { image: "IMAGE", video: "VIDEO", audio: "AUDIO", file: "FILE" } as const;
 
@@ -133,7 +128,7 @@ export async function POST(request: Request) {
     uploaded = await uploadAsset(buffer, {
       folder: CHAT_MEDIA_FOLDER,
       ownerId: conversationId,
-      resourceType: RESOURCE_TYPE[sniffed.kind],
+      resourceType: MESSAGE_RESOURCE_TYPE[MESSAGE_TYPE[sniffed.kind]],
       // No incoming transformation: unlike an avatar there's no crop to bake in,
       // and re-encoding a 20MB video on upload is not something to do inline.
       transformation: [],
@@ -155,6 +150,18 @@ export async function POST(request: Request) {
   // Voice notes only. Cloudinary's probe, not the client's stopwatch — and
   // deliberately not stored for VIDEO, where nothing renders it yet.
   const durationMs = sniffed.kind === "audio" ? uploaded.durationMs : null;
+
+  // §2.7's 2-minute cap, enforced from the probe on every AUDIO upload (voice
+  // intent or a picked .ogg alike) — the client's recorder cap is advisory.
+  // A probe miss (null) passes: it must not break legit sends, and the 5MB
+  // byte cap still bounds it. The asset is already stored, so a reject must
+  // clean up — best-effort, same posture as the avatar route's deletes.
+  if (durationMs !== null && durationMs > VOICE_NOTE_MAX_MS + VOICE_NOTE_SLACK_MS) {
+    destroyAsset(uploaded.publicId, MESSAGE_RESOURCE_TYPE.AUDIO).catch((err) =>
+      logServerError("chat-media:destroy", err),
+    );
+    return NextResponse.json({ error: "Voice messages can be up to 2 minutes" }, { status: 413 });
+  }
 
   let mediaToken: string;
   try {

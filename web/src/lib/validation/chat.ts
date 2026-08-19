@@ -90,7 +90,8 @@ export const MEDIA_RULES = {
 export type MediaKind = keyof typeof MEDIA_RULES;
 
 /** Voice-note recording cap. The recorder auto-stops here; the upload route
- *  cannot re-measure time from bytes, so the byte cap above is the server bound. */
+ *  re-checks Cloudinary's probed duration (plus jitter slack) on every AUDIO
+ *  upload, so this bound holds even against a client that skips the recorder. */
 export const VOICE_NOTE_MAX_MS = 2 * 60 * 1000;
 
 /** Largest cap across kinds — the cheap `content-length` precheck before any parsing. */

@@ -124,6 +124,19 @@ export const AVATAR_FOLDER = "avatars";
  *  one prefix per conversation. */
 export const CHAT_MEDIA_FOLDER = "chat";
 
+/**
+ * message.type → the resource_type its asset was uploaded with. Destroying with
+ * the wrong one silently answers "not found" and leaks the asset — a future
+ * chat-media sweep must read this, never hard-code "image". AUDIO is "video":
+ * that resource_type is what makes Cloudinary probe the duration.
+ */
+export const MESSAGE_RESOURCE_TYPE = {
+  IMAGE: "image",
+  VIDEO: "video",
+  AUDIO: "video",
+  FILE: "raw",
+} as const satisfies Record<string, CloudinaryResourceType>;
+
 // ---------------------------------------------------------------------------
 // Admin API — used only by the nightly cron jobs (web/src/lib/jobs/*). It has
 // its own hourly quota, far tighter than the upload API's, which is why every
