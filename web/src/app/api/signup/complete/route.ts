@@ -62,9 +62,8 @@ export async function POST(request: Request) {
     // cookies() — Next.js Route Handlers merge cookies()-queued mutations
     // into whatever Response the handler returns, even a raw one built
     // outside NextResponse, so both cookies should land in one reply.
-    // NOTE: unverified end-to-end (decision #7, no local test DB) — this is
-    // exactly the kind of thing the first real manual signup click-through
-    // (after `drizzle-kit push`) should specifically confirm.
+    // Pinned by tests/specs/10-auth.spec.ts's full-OTP signup test (runs when
+    // TEST_EMAIL is set): both cookies land in the one forwarded Response.
     cookieStore.delete(REGISTRATION_TOKEN_COOKIE);
     return response;
   } catch {

@@ -272,7 +272,7 @@ Call ends (§2.5) → the resulting CALL message goes through chat.md §6's
 
 ## 8.1 As-built notes (2026-08-19) — where the implementation refines this doc
 
-The feature is built (server `handlers/call.js` + `active-calls.js`, web `lib/call/*` + `components/features/call/*`, e2e `tests/specs/65-socket-call.spec.ts`). Behavior follows this doc; these are the deltas and decisions the doc left open:
+The feature is built (server `controllers/call/` + `services/active-calls.js`, web `lib/call/*` + `components/features/call/*`, e2e `tests/specs/65-socket-call.spec.ts`). Behavior follows this doc; these are the deltas and decisions the doc left open:
 
 - **`iceServers` ride the signaling acks** (`call:invite` / `call:accept` / `call:join` / `call:state`), read from the socket server's optional `ICE_SERVERS` env var (Google STUN default). Enabling TURN later is exactly the config-only change §9 promises — paste the relay into `server/.env`, no code change.
 - **§2.4's offer rule on the wire:** the accept/join **ack** tells the newcomer who is already in the call (they will be offered to); the `call:participant-joined` room broadcast tells the incumbents to (re-)offer toward the joiner. It fires on every join *including re-joins* — that re-broadcast is also the reconnect re-peer mechanism, and the newest session of a user always wins the mesh. The ack is deliberately sent **before** the broadcast (same-socket ordering).
@@ -282,7 +282,7 @@ The feature is built (server `handlers/call.js` + `active-calls.js`, web `lib/ca
 - **Disconnect matrix refinements:** all drop-ring/grace logic applies only to a user's *last* socket (multi-tab). A ringing GROUP callee disconnecting just leaves the rung set; group ring-outs are always `MISSED` (even all-declined) — `REJECTED` is DIRECT-only, matching §2.5's table where the difference is only ever visible to the caller. A DIRECT call ends when joined participants drop below 2.
 - **Terminal acks are `NOT_FOUND`,** the same answer as "no such call" — a late accept/reject/cancel is not distinguishable from probing, by the same masking rule as chat.
 - **Documented privacy trade-off:** §2.1/§8's "X is offline" / "X is on another call" answers reveal state even for users whose `onlineStatus` privacy hides presence. Doc-mandated behavior, implemented as specified, flagged here rather than silently gated.
-- **Rate limits as built:** 15 invites/hour per user (an hour-safe counter local to `handlers/call.js` — the shared limiter's sweeper can't hold windows >5min) plus a 20s/2 per-conversation redial cooldown against ring fatigue.
+- **Rate limits as built:** 15 invites/hour per user (an hour-safe counter local to `controllers/call/invite.js` — the shared limiter's sweeper can't hold windows >5min) plus a 20s/2 per-conversation redial cooldown against ring fatigue.
 - **Crash recovery:** on boot the server sweeps orphaned RINGING→MISSED and ONGOING→ENDED rows (no history bubble for crash orphans); clients resync via `call:state` on every connect and tear down cleanly when the server no longer knows their call.
 
 ## 9. Future Work — Not Built Yet

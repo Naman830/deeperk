@@ -109,7 +109,7 @@ You pause 2s   → socket.emit('typing:stop')
 
 Typing state is never persisted — meaningless a second later, same as README §8.4.
 
-**Multi-tab:** presence uses the same in-memory `Map<userId, Set<socketId>>` counter as README §8.4 — first tab connecting flips you online, last tab disconnecting flips you offline. This lives in `server/src/presence.js`; it's the documented single-server assumption, see README §13.1 for the Redis upgrade path.
+**Multi-tab:** presence uses the same in-memory `Map<userId, Set<socketId>>` counter as README §8.4 — first tab connecting flips you online, last tab disconnecting flips you offline. This lives in `server/src/services/presence.js`; it's the documented single-server assumption, see README §13.1 for the Redis upgrade path.
 
 **Privacy:** `presence:*` events and `lastSeenAt` in any API response are filtered server-side by the recipient's `privacy_settings.onlineStatus` before they leave the server — never hidden client-side only (profile.md §1's rule: "enforced in the API, never in the UI").
 
@@ -121,7 +121,7 @@ Same pipeline as profile.md's avatar upload, different bucket:
 Pick file → client-side size/type check (courtesy only)
    → POST /api/upload/chat-media  (multipart)
    → SERVER: logged in? member of the target conversation? sharp confirms real
-     format (image/video/file, size caps in §4)? rate limit (10/min, profile.md-style)?
+     format (image/video/file/audio, size caps in §4)? rate limit (10/min, profile.md-style)?
    → Cloudinary upload → { url, mime, size }
    → socket.emit('message:send', { type: 'IMAGE'|'VIDEO'|'FILE', mediaUrl, ... })
    → same path as §2.4 from here
@@ -130,15 +130,19 @@ Pick file → client-side size/type check (courtesy only)
 **Voice notes — BUILT (2026-08-19).** A fourth media kind, `AUDIO`, riding this exact
 pipeline with three deltas:
 
-- **Recorder-only.** The composer's mic button records via `MediaRecorder`
+- **Recorder-only in the UI.** The composer's mic button records via `MediaRecorder`
   (tap to start; strip with timer, cancel and send; 2-minute auto-stop that keeps the
-  take sendable). There is no file-picker path to an AUDIO message — a picked `.mp3`
-  is rejected by the sniff allowlist exactly as before.
+  take sendable). The composer's file picker offers no audio kinds and a picked `.mp3`
+  is rejected by the sniff allowlist — but a picked/direct-POSTed `.ogg` DOES become an
+  AUDIO message (OggS is the one container that sniffs unambiguously to audio), and is
+  subject to the same server-enforced 2-minute bound as a recording.
 - **The upload declares intent.** An audio-only webm/mp4 is byte-identical to a video
   in the same container, so the recorder sends `voice: "1"` and the route re-types an
   allowlisted A/V container to `AUDIO` + `audio/*` mime (anything else marked voice is
-  a 400). Cap 5MB. Uploaded as Cloudinary resource_type `video`, which is what probes
-  the bytes and returns the duration.
+  a 400). Caps: 5MB, and a server-enforced 2-minute duration bound checked against
+  Cloudinary's probe (+2s recorder-jitter slack) on every AUDIO upload — the client's
+  auto-stop is advisory. Uploaded as Cloudinary resource_type `video`, which is what
+  probes the bytes and returns the duration.
 - **`message.media_duration_ms`** stores that probed duration (never the client's
   stopwatch) — load-bearing for playback, because Chrome's MediaRecorder writes webm
   with no duration header and the `<audio>` element reports `Infinity`. The bubble is
@@ -187,7 +191,7 @@ New tables, all in `db/schema/chat/`, following the same `text("id").primaryKey(
 |---|---|
 | `conversation` | `id`, `type` (`DIRECT` \| `GROUP`), `name` (groups only), `avatarUrl` (groups only, Cloudinary), `createdById`, `createdAt`, `updatedAt` (bumped on every message — sorts the sidebar) |
 | `conversation_member` | `conversationId`, `userId`, `role` (`OWNER` \| `ADMIN` \| `MEMBER`), `joinedAt`, `lastReadAt` — composite PK on `(conversationId, userId)` |
-| `message` | `id`, `conversationId`, `senderId`, `type` (`TEXT` \| `IMAGE` \| `VIDEO` \| `FILE` \| `SYSTEM`), `body`, `mediaUrl`, `mediaMime`, `mediaSize`, `mediaName`, `createdAt`, `deletedAt` (soft delete) |
+| `message` | `id`, `conversationId`, `senderId`, `type` (`TEXT` \| `IMAGE` \| `VIDEO` \| `FILE` \| `AUDIO` \| `SYSTEM` \| `CALL`), `body`, `mediaUrl`, `mediaMime`, `mediaSize`, `mediaName`, `mediaDurationMs`, `createdAt`, `deletedAt` (soft delete) |
 
 Indexes that matter: `(conversationId, createdAt)` on `message` — every chat open runs "newest 30 in conversation X"; `(userId)` on `conversation_member` — "list all my chats." Both called out explicitly because README §6 flags them as the ones that turn a 1ms query into a full table scan if forgotten.
 
@@ -247,7 +251,7 @@ No Web Push (needs a service worker + VAPID + permission prompt) — README §13
 | Message >4000 chars or empty | Rejected, inline error |
 | Rate limit exceeded (messages or uploads) | Error to sender only, others unaffected |
 | Media: wrong real format / fake extension | Rejected — `sharp` reads actual bytes, same as profile.md avatar check |
-| Media over size cap (image 5MB / video 20MB / file 10MB) | Rejected, inline error |
+| Media over size cap (image 5MB / video 20MB / file 10MB / audio 5MB) | Rejected, inline error |
 | Group: <2 or >20 members, or name >50 chars | Rejected, inline error |
 | Starting a DM with someone who's set `discoverable: NOBODY`/restricted against you | Same non-committal failure as search already gives (profile.md-consistent) |
 | Socket disconnects mid-send | Client keeps the tempId bubble with a retry affordance; no silent message loss |

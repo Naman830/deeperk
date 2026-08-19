@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // The browser must reach Socket.IO on the web app's OWN origin: the session
-  // cookie is host-only and server/src/auth.js's handshake reads it, so a
+  // cookie is host-only and server/src/middlewares/auth.js's handshake reads it, so a
   // cross-site socket URL arrives with no cookie and every connection is
   // rejected. Proxying /socket.io/ keeps it same-origin (Docs/deployment/deploy.md).
   // On Vercel the WebSocket upgrade can't pass through a rewrite; engine.io's

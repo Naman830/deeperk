@@ -37,7 +37,7 @@ Tick a task off below when it's done, and update `CLAUDE.md` with any decision m
       Plus @mentions in groups and a per-chat media gallery. Schema is pushed and verified.
       Message reactions were built and then deliberately held back — they live on the
       `feature/message-reactions` branch, not on `main`.
-- [x] Call signaling (Socket.IO, `server/`) — `handlers/call.js` + `active-calls.js`: invite/ring/accept/join/leave/reject/cancel, verbatim `rtc:signal` relay, busy + 4-cap + one-call-per-conversation enforcement, 30s ring timer, 15s disconnect grace, boot reconciliation, CALL history bubble. See `CLAUDE.md` → "Calls" and `Docs/call/call.md` §8.1 for the decisions.
+- [x] Call signaling (Socket.IO, `server/`) — `controllers/call/` + `services/active-calls.js`: invite/ring/accept/join/leave/reject/cancel, verbatim `rtc:signal` relay, busy + 4-cap + one-call-per-conversation enforcement, 30s ring timer, 15s disconnect grace, boot reconciliation, CALL history bubble. See `CLAUDE.md` → "Calls" and `Docs/call/call.md` §8.1 for the decisions.
 
 ### Background jobs — built, on Vercel Cron
 
@@ -59,7 +59,7 @@ Two `CRON_SECRET`-protected Next route handlers under `web/src/app/api/cron/`, s
 
 - [x] Auth / Profile / Search verified end-to-end against the real Neon DB and a running `next dev` (66 API checks + 21 page-render checks). See CLAUDE.md → "End-to-end verification pass".
 - [x] **Cloudinary API key works** (re-verified 2026-08-17). `ping()`, `usage()`, and a real upload + destroy all succeed for both `image` and `raw` resource types. The earlier `actions=["create"]` 403 is gone, so nothing is blocked on credentials.
-- [x] **Chat verified end-to-end — and the harness is now permanent** (2026-08-18). `tests/` is a checked-in Vitest suite (11 files, ~133 assertions: every REST route, every socket event, the internal event bridge, pages) run with `npm test` against `npm run dev` + the real Neon DB; see `tests/README.md`. It found and pinned one real server bug (sends emitted right after `session:ready` were silently dropped) and the unread-divider misplacement.
+- [x] **Chat verified end-to-end — and the harness is now permanent** (2026-08-18). `tests/` is a checked-in Vitest suite (15 files, ~190 tests: every REST route, every socket event, the internal event bridge, pages) run with `npm test` against `npm run dev` + the real Neon DB; see `tests/README.md`. It found and pinned one real server bug (sends emitted right after `session:ready` were silently dropped) and the unread-divider misplacement.
 
 ### Deploy-day checklist
 

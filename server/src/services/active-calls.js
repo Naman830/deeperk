@@ -9,7 +9,7 @@ const { and, eq, isNull, isNotNull, sql } = ops;
  *
  * Every transition here is SYNCHRONOUS — zero await between check and mutate —
  * so handlers can check-and-reserve atomically on Node's single thread. DB
- * writes happen in handlers/call.js afterwards, driven by the returned result.
+ * writes happen in controllers/call/ afterwards, driven by the returned result.
  * Timers are advisory; this state is the truth, and every timer callback
  * re-checks it before acting.
  *
