@@ -14,6 +14,7 @@ const { createIo } = require("./socket/create-io");
 const { registerConnectionHandlers } = require("./socket/connection");
 const { startSessionSweep } = require("./socket/session-sweep");
 const presence = require("./presence");
+const activeCalls = require("./active-calls");
 const { internalRouter } = require("./http/internal");
 
 const BOOT_ID = randomUUID();
@@ -50,6 +51,7 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   clearInterval(revalidation);
+  activeCalls.shutdown();
   io.close();
   // Bounded: a hung database must not block a restart, and boot reconciliation
   // will clean up whatever this misses.
@@ -72,6 +74,8 @@ process.on("unhandledRejection", (error) =>
     // Before listening: the only thing that fixes rows left is_online = true by
     // a crash. Runs constantly in dev, where nodemon restarts on every save.
     await presence.reconcileOnBoot();
+    // Same posture for calls: RINGING/ONGOING rows left by a crash go terminal.
+    await activeCalls.reconcileOnBoot();
   } catch (error) {
     console.error("[socket:boot-reconcile]", error);
   }
