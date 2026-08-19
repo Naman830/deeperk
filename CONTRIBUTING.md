@@ -21,7 +21,7 @@ npm install          # from the ROOT
 npm run dev          # boots web (:3000) and server (:4000) together
 ```
 
-See the [README](README.md#getting-started) for the full env setup.
+See the [README](README.md#-getting-started) for the full env setup.
 
 ### Four house rules that fail quietly
 
@@ -134,7 +134,7 @@ feature, write or extend its spec first; if a spec and the code disagree about
 *behaviour*, the spec wins and the difference is a bug worth flagging.
 
 Where a spec names an *implementation* detail that changed during the build, the code
-wins — see the note in the [README's documentation index](README.md#documentation).
+wins — see the note in the [README's documentation index](README.md#-documentation).
 
 ---
 
