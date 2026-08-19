@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { toast } from "react-toastify";
-import { Check, CheckCheck, CircleAlert, Clock, FileText, Phone, Reply, RotateCw } from "lucide-react";
+import { Check, CheckCheck, CircleAlert, Clock, FileText, Phone, Reply, RotateCw, Video } from "lucide-react";
 import { UserAvatar } from "@/components/features/profile/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,6 +11,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { callBubbleText, parseCallBody } from "@/lib/call/call-message";
 import { renderMessageBody } from "@/lib/chat/rich-text";
 import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
@@ -95,11 +96,18 @@ function MessageBubbleImpl({
 
   // SYSTEM and CALL are centred notices, never grouped and never avatared.
   if (message.type === "SYSTEM" || message.type === "CALL") {
+    // Per-viewer wording derived from the body JSON + senderId — zero new
+    // props, so the memo contract holds.
+    const parsed = message.type === "CALL" ? parseCallBody(message.body) : null;
     return (
       <li className="flex justify-center py-1.5">
         <span className="text-muted-foreground bg-muted/60 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs">
-          {message.type === "CALL" && <Phone size={12} />}
-          {message.body ?? (message.type === "CALL" ? "Call" : "")}
+          {message.type === "CALL" && (parsed?.kind === "VIDEO" ? <Video size={12} /> : <Phone size={12} />)}
+          {message.type === "CALL"
+            ? parsed
+              ? callBubbleText(parsed, message.senderId === viewerId)
+              : "Call"
+            : (message.body ?? "")}
         </span>
       </li>
     );

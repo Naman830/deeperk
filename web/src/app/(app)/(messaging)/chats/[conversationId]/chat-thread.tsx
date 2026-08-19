@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { ArrowDown } from "lucide-react";
 import { MainPane } from "@/components/features/shell/main-pane";
 import { Button } from "@/components/ui/button";
+import { JoinCallBanner } from "@/components/features/call/join-call-banner";
 import {
   subscribeLive,
   getLiveMessages,
@@ -454,6 +455,8 @@ export function ChatThread({
           onOpenMedia={() => setMediaOpen(true)}
         />
       )}
+
+      {conversation.type === "GROUP" && <JoinCallBanner conversationId={conversation.id} />}
 
       {searchOpen && !selectMode && (
         <ThreadSearch

@@ -5,11 +5,15 @@ import { EmptyState } from "@/components/features/shell/empty-state";
 
 export const metadata: Metadata = { title: "Calls" };
 
-// Placeholder until Socket.IO signaling exists (Docs/call/call.md — not built).
+// Desktop-only no-selection pane — on mobile /calls shows the list column.
 export default function CallsPage() {
   return (
     <MainPane centered>
-      <EmptyState icon={<Phone size={40} />} title="Calls aren't available yet" description="Audio and video calling arrives with the signaling server." />
+      <EmptyState
+        icon={<Phone size={40} />}
+        title="Select someone to call"
+        description="Open a chat and use the phone or camera icon in its header, or call someone back from your history."
+      />
     </MainPane>
   );
 }

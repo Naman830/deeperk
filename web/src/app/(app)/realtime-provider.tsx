@@ -14,7 +14,8 @@ import {
   clearLiveMessages,
 } from "@/lib/chat/live-store";
 import { mentionsUser } from "@/lib/chat/rich-text";
-import { getNotificationPrefs } from "@/components/features/shell/notification-prefs";
+import { callPreviewText, parseCallBody } from "@/lib/call/call-message";
+import { getNotificationPrefs } from "@/lib/realtime/notification-prefs";
 import { apiPost, apiPatch, apiDelete } from "@/lib/api-client";
 import type { ChatMember, ChatMessage, ConversationSummary } from "@/lib/chat/types";
 import { notifyIncomingMessage, notifyAddedToConversation } from "./message-toast";
@@ -881,7 +882,8 @@ function previewOf(message: ChatMessage): string {
     case "FILE":
       return message.mediaName ?? "File";
     case "CALL":
-      return "Call";
+      // Viewer-neutral wording — a preview has no viewer role. Null-safe: "Call".
+      return callPreviewText(parseCallBody(message.body));
     default:
       return (message.body ?? "").slice(0, 120);
   }

@@ -12,9 +12,9 @@ export default async function NotificationSettingsPage() {
 
   // No profile fetch: unlike every other settings page, nothing here is stored
   // on the server. These are per-device display preferences held in
-  // localStorage — see components/features/shell/notification-prefs.tsx for the
-  // reasoning, and for why per-conversation mute is the one exception that does
-  // live in the database.
+  // localStorage — see lib/realtime/notification-prefs.ts for the reasoning,
+  // and for why per-conversation mute is the one exception that does live in
+  // the database.
   return (
     <SettingsPane title="Notifications">
       <p className="text-muted-foreground text-sm">

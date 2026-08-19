@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { getOwnProfile } from "@/lib/profile/own-profile";
 import { listConversations } from "@/lib/chat/conversations";
 import { AppRail } from "./app-rail";
+import { CallProvider } from "./call-provider";
 import { RealtimeProvider } from "./realtime-provider";
 import { RAIL_COOKIE, isRailCollapsed } from "./rail-cookie";
 
@@ -52,6 +53,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
         <div className="flex h-full min-w-0 flex-1">{children}</div>
       </div>
+      {/* Sibling of the shell, not inside it: the overlay and minimized tile
+          are fixed-position and must survive any route change. */}
+      <CallProvider />
     </RealtimeProvider>
   );
 }

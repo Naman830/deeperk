@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, BellOff, Pin, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CallButtons } from "@/components/features/call/call-buttons";
 import { UserAvatar } from "@/components/features/profile/user-avatar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useNow, isMuted } from "@/lib/hooks/use-now";
@@ -112,6 +113,8 @@ export function ThreadHeader({
         </Button>
       )}
       {isGroup && <GroupSettingsDialog conversation={conversation} viewerId={viewerId} />}
+
+      <CallButtons conversationId={conversation.id} />
 
       <ConversationMenu
         conversation={conversation}

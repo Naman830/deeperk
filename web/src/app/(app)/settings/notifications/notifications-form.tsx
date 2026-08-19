@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Bell, MessageSquare, Type, Volume2 } from "lucide-react";
+import { AtSign, Bell, MessageSquare, PhoneIncoming, Type, Volume2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -8,7 +8,7 @@ import { playBlip, primeBlip } from "@/lib/realtime/blip";
 import {
   useNotificationPrefs,
   type NotificationPrefs,
-} from "@/components/features/shell/notification-prefs";
+} from "@/lib/realtime/notification-prefs";
 
 const ROWS: {
   key: keyof NotificationPrefs;
@@ -33,6 +33,12 @@ const ROWS: {
     label: "Flash the tab title",
     description: "Shows the unread count in the browser tab while ChatSphere is in the background.",
     icon: Type,
+  },
+  {
+    key: "ringtone",
+    label: "Ring for incoming calls",
+    description: "Play a ringtone when a call comes in — the call screen itself always shows.",
+    icon: PhoneIncoming,
   },
 ];
 
