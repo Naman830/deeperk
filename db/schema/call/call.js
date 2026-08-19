@@ -56,6 +56,10 @@ const call = pgTable(
       table.conversationId,
       table.startedAt,
     ),
+    // Cross-conversation history feed: the (started_at, id) keyset in
+    // web/src/lib/call/history.ts — the index above leads with conversation_id
+    // and cannot serve it.
+    index("idx_call_started_at_id").on(table.startedAt, table.id),
   ],
 );
 
