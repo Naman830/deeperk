@@ -26,6 +26,8 @@ That matters most in §2.4 (group calls): in a mesh, you're simultaneously the *
 
 **Considered and rejected:** `PeerJS` — does the same wrapping, but ships its own hosted signaling server by default. We already run an authenticated Socket.IO server (chat.md §2.1 is the whole reason it can verify who's calling whom); adding a second signaling path would be a redundant moving part, the same reasoning auth.md used to pick a self-hosted auth library over a hosted one.
 
+> **Amendment (2026-08-19, as built): in-repo wrapper instead of `simple-peer`.** The one-event API this section praises is preserved, but it lives in `web/src/lib/call/peer.ts` (~150 lines) wrapping the browser's native `RTCPeerConnection` — constructor `{initiator, stream, iceServers}`, `.signal(data)` for whatever arrives, `onSignal`/`onStream`/`onClose` callbacks, `.destroy()`. `simple-peer` is unmaintained (last release ~3 years ago) and drags Node stream/buffer polyfills into the browser bundle that Next 16's bundler doesn't provide. §2.4's fixed rule — existing participants always offer toward the newcomer, never the reverse — removes the glare handling that is most of simple-peer's remaining value. Every `SimplePeer(...)` mention below reads as `CallPeer(...)`; the flow is unchanged. The PeerJS rejection above stands for the same reason it did.
+
 ---
 
 ## 2. The Flow
@@ -263,6 +265,21 @@ Call ends (§2.5) → the resulting CALL message goes through chat.md §6's
 | A `rtc:signal` arrives for a call that already ended | Dropped silently — the receiving side's peer connection no longer exists to feed it into |
 
 ---
+
+## 8.1 As-built notes (2026-08-19) — where the implementation refines this doc
+
+The feature is built (server `handlers/call.js` + `active-calls.js`, web `lib/call/*` + `components/features/call/*`, e2e `tests/specs/65-socket-call.spec.ts`). Behavior follows this doc; these are the deltas and decisions the doc left open:
+
+- **`iceServers` ride the signaling acks** (`call:invite` / `call:accept` / `call:join` / `call:state`), read from the socket server's optional `ICE_SERVERS` env var (Google STUN default). Enabling TURN later is exactly the config-only change §9 promises — paste the relay into `server/.env`, no code change.
+- **§2.4's offer rule on the wire:** the accept/join **ack** tells the newcomer who is already in the call (they will be offered to); the `call:participant-joined` room broadcast tells the incumbents to (re-)offer toward the joiner. It fires on every join *including re-joins* — that re-broadcast is also the reconnect re-peer mechanism, and the newest session of a user always wins the mesh. The ack is deliberately sent **before** the broadcast (same-socket ordering).
+- **The CALL bubble stores a snapshot, wording stays derived:** `message.body` is compact JSON `{"status","kind","durationSec"}` written once when the call is finalized (immutable from then on); §2.5's per-viewer wording is derived client-side from it plus `senderId === viewerId`. `durationSec` measures from the moment the call went ONGOING (talk time, not ring time); null for MISSED/REJECTED.
+- **One live call per conversation.** A second `call:invite` into a conversation with a RINGING/ONGOING call answers `CALL_ACTIVE` carrying the existing `callId` — which is also how simultaneous cross-invites in a DM resolve: the loser's client pivots to answering the existing call with the media it already acquired.
+- **Two grace windows, deliberately nested:** the client's 8s peer-level `disconnected` grace (§2.6) sits inside the server's 15s socket-disconnect grace (`CALL_DISCONNECT_GRACE_MS`) — the server is never the first to end a call the peers still consider alive. Any new socket for the user cancels the server grace.
+- **Disconnect matrix refinements:** all drop-ring/grace logic applies only to a user's *last* socket (multi-tab). A ringing GROUP callee disconnecting just leaves the rung set; group ring-outs are always `MISSED` (even all-declined) — `REJECTED` is DIRECT-only, matching §2.5's table where the difference is only ever visible to the caller. A DIRECT call ends when joined participants drop below 2.
+- **Terminal acks are `NOT_FOUND`,** the same answer as "no such call" — a late accept/reject/cancel is not distinguishable from probing, by the same masking rule as chat.
+- **Documented privacy trade-off:** §2.1/§8's "X is offline" / "X is on another call" answers reveal state even for users whose `onlineStatus` privacy hides presence. Doc-mandated behavior, implemented as specified, flagged here rather than silently gated.
+- **Rate limits as built:** 15 invites/hour per user (an hour-safe counter local to `handlers/call.js` — the shared limiter's sweeper can't hold windows >5min) plus a 20s/2 per-conversation redial cooldown against ring fatigue.
+- **Crash recovery:** on boot the server sweeps orphaned RINGING→MISSED and ONGOING→ENDED rows (no history bubble for crash orphans); clients resync via `call:state` on every connect and tear down cleanly when the server no longer knows their call.
 
 ## 9. Future Work — Not Built Yet
 

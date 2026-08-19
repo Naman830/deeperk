@@ -41,12 +41,13 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
 
 1. Fork or push this repo to your own GitHub account (Vercel and Render deploy from GitHub).
 2. Create free accounts on Vercel, Render, Neon, Brevo, Cloudinary.
-3. Generate **three secrets** locally and save them somewhere — you'll paste them into dashboards later:
+3. Generate **four secrets** locally and save them somewhere — you'll paste them into dashboards later:
 
    ```bash
    openssl rand -hex 32   # → BETTER_AUTH_SECRET
    openssl rand -hex 32   # → MEDIA_SIGNING_SECRET
    openssl rand -hex 32   # → INTERNAL_API_SECRET
+   openssl rand -hex 32   # → CRON_SECRET (authorizes the nightly /api/cron/* jobs)
    ```
 
 ## Step 1 — Neon (database)
@@ -80,6 +81,8 @@ This guide takes a fresh clone of this repo to a live, publicly reachable deploy
 
 From the Cloudinary dashboard copy three values: **cloud name**, **API key**, **API secret**. Use an unrestricted key, or a scoped one granted at least `create` + `read` — a key without `create` answers 403 on every upload while looking healthy otherwise.
 
+> **⚠ The nightly cron jobs also use Cloudinary's Admin API** (listing assets by prefix, deleting orphans, destroying anonymized users' avatar folders). A scoped key that only allows `create`+`read` uploads may refuse those calls — the sweeps then answer 500 in the Vercel cron log while uploads keep working. An unrestricted key avoids the split-brain.
+
 ## Step 4 — Render (Socket.IO server)
 
 Create **New → Web Service**, connect your GitHub repo, then:
@@ -105,6 +108,8 @@ Environment variables (Render dashboard → Environment):
 | `SOCKET_SINGLE_INSTANCE` | `true` |
 | `MEDIA_SIGNING_SECRET` | the hex secret from Step 0 |
 | `INTERNAL_API_SECRET` | the hex secret from Step 0 |
+| `ICE_SERVERS` | *(optional — see "WebRTC calls: TURN" below)* JSON array of `{"urls": …}` objects handed to callers in signaling acks. Unset = Google STUN only. **Malformed JSON makes the server refuse to start** (a crash-loop on Render) — deliberate, so a typo'd TURN config can never silently degrade calls to STUN-only |
+| `CALL_RING_TIMEOUT_MS` / `CALL_DISCONNECT_GRACE_MS` | *(optional)* ring timeout / mid-call reconnect grace; defaults 30000 / 15000 |
 
 Deploy, then note your service URL, e.g. `https://chatsphere-socket.onrender.com`. Verify: opening `<render-url>/healthz` in a browser returns `{"ok":true,…}` (first hit after idle takes 30–60 s — see "Free-tier realities" below).
 
@@ -137,10 +142,17 @@ Environment variables (add for Production):
 | `SOCKET_INTERNAL_URL` | `https://<your-service>.onrender.com` — the Render URL (used server-side, and by the rewrite) |
 | `MEDIA_SIGNING_SECRET` | **identical** to Render's value — a mismatch rejects every media message |
 | `INTERNAL_API_SECRET` | **identical** to Render's value |
+| `CRON_SECRET` | the hex secret from Step 0 — Vercel Cron sends it as `Authorization: Bearer …` to the two nightly `/api/cron/*` routes; with it unset every cron request is refused (fail closed) and the jobs never run |
 
 Leave `TRUSTED_PROXIES` **unset on Vercel** — Vercel overwrites `x-forwarded-for` with the real client IP, so the verbatim value is trustworthy. Set it (to your proxy's CIDRs) only on self-hosted deploys behind your own nginx/load balancer, otherwise IP-keyed rate limits are spoofable there.
 
 Deploy. Note the production URL (`https://<your-app>.vercel.app`).
+
+### Nightly cron jobs (run on Vercel, configured already)
+
+`web/vercel.json` defines two Vercel Cron entries — `/api/cron/anonymize-accounts` (03:00 UTC: anonymizes accounts past their 30-day deletion window, sweeps expired username holds) and `/api/cron/sweep-avatars` (05:00 UTC: deletes orphaned Cloudinary avatar assets). Nothing to set up beyond the `CRON_SECRET` env var above; after the first deploy, confirm both appear under **Project → Settings → Cron Jobs**.
+
+> **Hobby-plan cron realities:** jobs run **once per day at most** and the hour is approximate (up to ~1h of jitter) — both jobs are designed for exactly that cadence. Hobby also caps a project at **2 cron jobs**, and both slots are used. Each run's JSON report (`{"ok":true,"anonymized":…}`) lands in the function logs.
 
 ## Step 6 — close the loop
 
@@ -162,9 +174,20 @@ Go back to Render and set `WEB_ORIGIN` and `WEB_INTERNAL_URL` to the real Vercel
 - **One socket instance only** — never scale the Render service horizontally as configured.
 - **Deploys are automatic**: pushing to `main` redeploys Vercel; Render redeploys on push too (both watch the GitHub repo).
 
-## Future: WebRTC calls need a TURN server
+## WebRTC calls: TURN is a config-only deploy step
 
-Call signaling/UI is not built yet. When it lands, real-world calls need a TURN relay for the ~10–20 % of users behind strict NATs. Free options to evaluate then: **Cloudflare Calls TURN** (generous free egress) or **Metered Open Relay** (free tier, limited monthly relay bandwidth). STUN alone (`stun:stun.l.google.com:19302`) is free and covers the rest. This only affects media relay — the signaling itself runs on the existing Render socket server at no extra cost.
+Calls are built and work out of the box on Google STUN — but STUN alone fails for the **~10–15 % of users behind strict/symmetric NATs** (the call rings, connects nothing, and times out after ~20 s with "Couldn't connect — check your network"). The fix is a TURN relay, and it is **one env var on Render, no code change, nothing on Vercel**:
+
+1. Get free TURN credentials: **Cloudflare Calls TURN** (generous free egress) or **Metered Open Relay** (free tier, limited monthly relay bandwidth).
+2. On Render, set `ICE_SERVERS` to a JSON array including both STUN and your TURN entry, e.g.:
+
+   ```
+   [{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:relay.example.com:443?transport=tcp","username":"…","credential":"…"}]
+   ```
+
+3. Save — Render redeploys, and every subsequent call hands the new servers to both peers in the signaling acks (`iceServers` ride the acks; clients never read an env var for this).
+
+**Malformed JSON refuses to boot** rather than silently degrading to STUN-only — if Render crash-loops right after this change, the value doesn't parse (check the quotes your shell/dashboard may have mangled). This only affects media relay — signaling runs on the existing Render socket server at no extra cost.
 
 ## Troubleshooting
 
@@ -178,4 +201,7 @@ Call signaling/UI is not built yet. When it lands, real-world calls need a TURN 
 | Media messages all rejected / 503 | `MEDIA_SIGNING_SECRET` differs between Vercel and Render (or is unset on one) |
 | Signup says email delivery failed (502) | Sender not verified in Brevo (400 — Step 2), `BREVO_API_KEY` invalid or Authorized IPs enabled (401), or the 300/day quota is spent. The real cause is in the Vercel function log — the app logs it and returns a generic message |
 | Avatar upload 503 | Cloudinary env vars missing; 403-on-upload means the API key lacks the `create` permission |
+| Render crash-loops immediately after setting `ICE_SERVERS` | The value isn't valid JSON — the server refuses to start on purpose rather than silently running STUN-only |
+| Calls ring but never connect on some networks, "Couldn't connect" after ~20 s | Strict/symmetric NAT and no TURN relay configured — see "WebRTC calls: TURN" above |
+| Cron jobs listed in Vercel but every run logs 403 | `CRON_SECRET` unset (fail-closed) or differs from what Vercel Cron sends |
 | First request after idle hangs ~1 min | Render cold start — expected on the free tier |

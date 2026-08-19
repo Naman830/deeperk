@@ -105,6 +105,8 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 | Typed username doesn't match | Inline error, stays on screen |
 | Logs in during the 30-day window | Deletion silently cancelled |
 
+> **The nightly job is built** (2026-08-19): `GET /api/cron/anonymize-accounts`, run by Vercel Cron (`web/vercel.json`). It anonymizes the `user` row in place (name → "Deleted User", derived `deleted.<hex>` handle/email, `birthDate` sentinel), revokes every session, deletes `account`/`social_link`/`privacy_settings`/`pending_contact_change`/owned `reserved_username` rows, destroys the `avatars/<userId>/` Cloudinary folder, and stamps `deactivatedAt` as the permanent "hidden" marker. Messages, calls and memberships are untouched — history keeps resolving. See `CLAUDE.md` → "Nightly cron jobs" for the ordering/race decisions.
+
 ---
 
 ## 6. Rate Limits
@@ -123,6 +125,7 @@ Everyday fields (first name, last name, bio, social links) skip this diagram ent
 ## 7. Future Work — Not Built Yet
 
 **Deactivate.** A softer alternative to Delete — "hide me for a while," not "delete me." `deactivatedAt = now()` pulls the account out of search, shows "This account is unavailable" on the profile, and revokes every session, but touches no other row. Logging back in un-hides it instantly, no waiting period. Kept as a separate button from Delete on purpose — merging them is how someone permanently destroys an account they only wanted to hide for a week.
+   *Note:* the user-facing feature is unbuilt, but the **column is now written** by the nightly anonymizer, which stamps `deactivatedAt` as its permanent hidden marker. Whenever Deactivate is built, its "logging back in un-hides it" step must not be able to resurrect anonymized rows — safe today because the anonymizer also deletes the `account` row, so those users can never log in; preserve that invariant.
 
 **2FA (TOTP).** Already specced in auth.md §7 — same `twoFactor` Better Auth plugin, same QR-code + backup-codes flow. The only piece that belongs to this document is the Settings entry point (an enable/disable row linking into that flow).
 
